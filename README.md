@@ -1,3 +1,8 @@
 # AndroidEigen
+# Using latest Eigen library to perform basic matrix manipulation.
 
-android使用开源的Engin数据矩阵计算库,简单案例
+1. Add
+2. Subract
+3. Multiply
+4. Division
+5. Transpose
