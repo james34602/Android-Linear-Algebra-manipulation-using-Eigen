@@ -4,27 +4,26 @@
 // Copyright (C) 2008-2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 // Copyright (C) 2009 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_FULLPIVOTINGHOUSEHOLDERQR_H
 #define EIGEN_FULLPIVOTINGHOUSEHOLDERQR_H
+
+namespace Eigen { 
+
+namespace internal {
+
+template<typename MatrixType> struct FullPivHouseholderQRMatrixQReturnType;
+
+template<typename MatrixType>
+struct traits<FullPivHouseholderQRMatrixQReturnType<MatrixType> >
+{
+  typedef typename MatrixType::PlainObject ReturnType;
+};
+
+}
 
 /** \ingroup QR_Module
   *
@@ -62,13 +61,14 @@ template<typename _MatrixType> class FullPivHouseholderQR
     typedef typename MatrixType::Scalar Scalar;
     typedef typename MatrixType::RealScalar RealScalar;
     typedef typename MatrixType::Index Index;
-    typedef Matrix<Scalar, RowsAtCompileTime, RowsAtCompileTime, Options, MaxRowsAtCompileTime, MaxRowsAtCompileTime> MatrixQType;
-    typedef typename ei_plain_diag_type<MatrixType>::type HCoeffsType;
-    typedef Matrix<Index, 1, ColsAtCompileTime, RowMajor, 1, MaxColsAtCompileTime> IntRowVectorType;
+    typedef internal::FullPivHouseholderQRMatrixQReturnType<MatrixType> MatrixQReturnType;
+    typedef typename internal::plain_diag_type<MatrixType>::type HCoeffsType;
+    typedef Matrix<Index, 1,
+                   EIGEN_SIZE_MIN_PREFER_DYNAMIC(ColsAtCompileTime,RowsAtCompileTime), RowMajor, 1,
+                   EIGEN_SIZE_MIN_PREFER_FIXED(MaxColsAtCompileTime,MaxRowsAtCompileTime)> IntDiagSizeVectorType;
     typedef PermutationMatrix<ColsAtCompileTime, MaxColsAtCompileTime> PermutationType;
-    typedef typename ei_plain_col_type<MatrixType, Index>::type IntColVectorType;
-    typedef typename ei_plain_row_type<MatrixType>::type RowVectorType;
-    typedef typename ei_plain_col_type<MatrixType>::type ColVectorType;
+    typedef typename internal::plain_row_type<MatrixType>::type RowVectorType;
+    typedef typename internal::plain_col_type<MatrixType>::type ColVectorType;
 
     /** \brief Default Constructor.
       *
@@ -82,7 +82,8 @@ template<typename _MatrixType> class FullPivHouseholderQR
         m_cols_transpositions(),
         m_cols_permutation(),
         m_temp(),
-        m_isInitialized(false) {}
+        m_isInitialized(false),
+        m_usePrescribedThreshold(false) {}
 
     /** \brief Default Constructor with memory preallocation
       *
@@ -92,34 +93,46 @@ template<typename _MatrixType> class FullPivHouseholderQR
       */
     FullPivHouseholderQR(Index rows, Index cols)
       : m_qr(rows, cols),
-        m_hCoeffs(std::min(rows,cols)),
-        m_rows_transpositions(rows),
-        m_cols_transpositions(cols),
+        m_hCoeffs((std::min)(rows,cols)),
+        m_rows_transpositions((std::min)(rows,cols)),
+        m_cols_transpositions((std::min)(rows,cols)),
         m_cols_permutation(cols),
-        m_temp(std::min(rows,cols)),
-        m_isInitialized(false) {}
+        m_temp(cols),
+        m_isInitialized(false),
+        m_usePrescribedThreshold(false) {}
 
+    /** \brief Constructs a QR factorization from a given matrix
+      *
+      * This constructor computes the QR factorization of the matrix \a matrix by calling
+      * the method compute(). It is a short cut for:
+      * 
+      * \code
+      * FullPivHouseholderQR<MatrixType> qr(matrix.rows(), matrix.cols());
+      * qr.compute(matrix);
+      * \endcode
+      * 
+      * \sa compute()
+      */
     FullPivHouseholderQR(const MatrixType& matrix)
       : m_qr(matrix.rows(), matrix.cols()),
-        m_hCoeffs(std::min(matrix.rows(), matrix.cols())),
-        m_rows_transpositions(matrix.rows()),
-        m_cols_transpositions(matrix.cols()),
+        m_hCoeffs((std::min)(matrix.rows(), matrix.cols())),
+        m_rows_transpositions((std::min)(matrix.rows(), matrix.cols())),
+        m_cols_transpositions((std::min)(matrix.rows(), matrix.cols())),
         m_cols_permutation(matrix.cols()),
-        m_temp(std::min(matrix.rows(), matrix.cols())),
-        m_isInitialized(false)
+        m_temp(matrix.cols()),
+        m_isInitialized(false),
+        m_usePrescribedThreshold(false)
     {
       compute(matrix);
     }
 
     /** This method finds a solution x to the equation Ax=b, where A is the matrix of which
-      * *this is the QR decomposition, if any exists.
+      * \c *this is the QR decomposition.
       *
       * \param b the right-hand-side of the equation to solve.
       *
-      * \returns a solution.
-      *
-      * \note The case where b is a matrix is not yet implemented. Also, this
-      *       code is space inefficient.
+      * \returns the exact or least-square solution if the rank is greater or equal to the number of columns of A,
+      * and an arbitrary solution otherwise.
       *
       * \note_about_checking_solutions
       *
@@ -129,34 +142,38 @@ template<typename _MatrixType> class FullPivHouseholderQR
       * Output: \verbinclude FullPivHouseholderQR_solve.out
       */
     template<typename Rhs>
-    inline const ei_solve_retval<FullPivHouseholderQR, Rhs>
+    inline const internal::solve_retval<FullPivHouseholderQR, Rhs>
     solve(const MatrixBase<Rhs>& b) const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return ei_solve_retval<FullPivHouseholderQR, Rhs>(*this, b.derived());
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      return internal::solve_retval<FullPivHouseholderQR, Rhs>(*this, b.derived());
     }
 
-    MatrixQType matrixQ(void) const;
+    /** \returns Expression object representing the matrix Q
+      */
+    MatrixQReturnType matrixQ(void) const;
 
     /** \returns a reference to the matrix where the Householder QR decomposition is stored
       */
     const MatrixType& matrixQR() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
       return m_qr;
     }
 
     FullPivHouseholderQR& compute(const MatrixType& matrix);
 
+    /** \returns a const reference to the column permutation matrix */
     const PermutationType& colsPermutation() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
       return m_cols_permutation;
     }
 
-    const IntColVectorType& rowsTranspositions() const
+    /** \returns a const reference to the vector of indices representing the rows transpositions */
+    const IntDiagSizeVectorType& rowsTranspositions() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
       return m_rows_transpositions;
     }
 
@@ -191,58 +208,68 @@ template<typename _MatrixType> class FullPivHouseholderQR
 
     /** \returns the rank of the matrix of which *this is the QR decomposition.
       *
-      * \note This is computed at the time of the construction of the QR decomposition. This
-      *       method does not perform any further computation.
+      * \note This method has to determine which pivots should be considered nonzero.
+      *       For that, it uses the threshold value that you can control by calling
+      *       setThreshold(const RealScalar&).
       */
     inline Index rank() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return m_rank;
+      using std::abs;
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      RealScalar premultiplied_threshold = abs(m_maxpivot) * threshold();
+      Index result = 0;
+      for(Index i = 0; i < m_nonzero_pivots; ++i)
+        result += (abs(m_qr.coeff(i,i)) > premultiplied_threshold);
+      return result;
     }
 
     /** \returns the dimension of the kernel of the matrix of which *this is the QR decomposition.
       *
-      * \note Since the rank is computed at the time of the construction of the QR decomposition, this
-      *       method almost does not perform any further computation.
+      * \note This method has to determine which pivots should be considered nonzero.
+      *       For that, it uses the threshold value that you can control by calling
+      *       setThreshold(const RealScalar&).
       */
     inline Index dimensionOfKernel() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return m_qr.cols() - m_rank;
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      return cols() - rank();
     }
 
     /** \returns true if the matrix of which *this is the QR decomposition represents an injective
       *          linear map, i.e. has trivial kernel; false otherwise.
       *
-      * \note Since the rank is computed at the time of the construction of the QR decomposition, this
-      *       method almost does not perform any further computation.
+      * \note This method has to determine which pivots should be considered nonzero.
+      *       For that, it uses the threshold value that you can control by calling
+      *       setThreshold(const RealScalar&).
       */
     inline bool isInjective() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return m_rank == m_qr.cols();
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      return rank() == cols();
     }
 
     /** \returns true if the matrix of which *this is the QR decomposition represents a surjective
       *          linear map; false otherwise.
       *
-      * \note Since the rank is computed at the time of the construction of the QR decomposition, this
-      *       method almost does not perform any further computation.
+      * \note This method has to determine which pivots should be considered nonzero.
+      *       For that, it uses the threshold value that you can control by calling
+      *       setThreshold(const RealScalar&).
       */
     inline bool isSurjective() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return m_rank == m_qr.rows();
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      return rank() == rows();
     }
 
     /** \returns true if the matrix of which *this is the QR decomposition is invertible.
       *
-      * \note Since the rank is computed at the time of the construction of the QR decomposition, this
-      *       method almost does not perform any further computation.
+      * \note This method has to determine which pivots should be considered nonzero.
+      *       For that, it uses the threshold value that you can control by calling
+      *       setThreshold(const RealScalar&).
       */
     inline bool isInvertible() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
       return isInjective() && isSurjective();
     }
 
@@ -251,67 +278,160 @@ template<typename _MatrixType> class FullPivHouseholderQR
       * \note If this matrix is not invertible, the returned matrix has undefined coefficients.
       *       Use isInvertible() to first determine whether this matrix is invertible.
       */    inline const
-    ei_solve_retval<FullPivHouseholderQR, typename MatrixType::IdentityReturnType>
+    internal::solve_retval<FullPivHouseholderQR, typename MatrixType::IdentityReturnType>
     inverse() const
     {
-      ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-      return ei_solve_retval<FullPivHouseholderQR,typename MatrixType::IdentityReturnType>
+      eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+      return internal::solve_retval<FullPivHouseholderQR,typename MatrixType::IdentityReturnType>
                (*this, MatrixType::Identity(m_qr.rows(), m_qr.cols()));
     }
 
     inline Index rows() const { return m_qr.rows(); }
     inline Index cols() const { return m_qr.cols(); }
+    
+    /** \returns a const reference to the vector of Householder coefficients used to represent the factor \c Q.
+      * 
+      * For advanced uses only.
+      */
     const HCoeffsType& hCoeffs() const { return m_hCoeffs; }
 
+    /** Allows to prescribe a threshold to be used by certain methods, such as rank(),
+      * who need to determine when pivots are to be considered nonzero. This is not used for the
+      * QR decomposition itself.
+      *
+      * When it needs to get the threshold value, Eigen calls threshold(). By default, this
+      * uses a formula to automatically determine a reasonable threshold.
+      * Once you have called the present method setThreshold(const RealScalar&),
+      * your value is used instead.
+      *
+      * \param threshold The new value to use as the threshold.
+      *
+      * A pivot will be considered nonzero if its absolute value is strictly greater than
+      *  \f$ \vert pivot \vert \leqslant threshold \times \vert maxpivot \vert \f$
+      * where maxpivot is the biggest pivot.
+      *
+      * If you want to come back to the default behavior, call setThreshold(Default_t)
+      */
+    FullPivHouseholderQR& setThreshold(const RealScalar& threshold)
+    {
+      m_usePrescribedThreshold = true;
+      m_prescribedThreshold = threshold;
+      return *this;
+    }
+
+    /** Allows to come back to the default behavior, letting Eigen use its default formula for
+      * determining the threshold.
+      *
+      * You should pass the special object Eigen::Default as parameter here.
+      * \code qr.setThreshold(Eigen::Default); \endcode
+      *
+      * See the documentation of setThreshold(const RealScalar&).
+      */
+    FullPivHouseholderQR& setThreshold(Default_t)
+    {
+      m_usePrescribedThreshold = false;
+      return *this;
+    }
+
+    /** Returns the threshold that will be used by certain methods such as rank().
+      *
+      * See the documentation of setThreshold(const RealScalar&).
+      */
+    RealScalar threshold() const
+    {
+      eigen_assert(m_isInitialized || m_usePrescribedThreshold);
+      return m_usePrescribedThreshold ? m_prescribedThreshold
+      // this formula comes from experimenting (see "LU precision tuning" thread on the list)
+      // and turns out to be identical to Higham's formula used already in LDLt.
+                                      : NumTraits<Scalar>::epsilon() * RealScalar(m_qr.diagonalSize());
+    }
+
+    /** \returns the number of nonzero pivots in the QR decomposition.
+      * Here nonzero is meant in the exact sense, not in a fuzzy sense.
+      * So that notion isn't really intrinsically interesting, but it is
+      * still useful when implementing algorithms.
+      *
+      * \sa rank()
+      */
+    inline Index nonzeroPivots() const
+    {
+      eigen_assert(m_isInitialized && "LU is not initialized.");
+      return m_nonzero_pivots;
+    }
+
+    /** \returns the absolute value of the biggest pivot, i.e. the biggest
+      *          diagonal coefficient of U.
+      */
+    RealScalar maxPivot() const { return m_maxpivot; }
+
   protected:
+    
+    static void check_template_parameters()
+    {
+      EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar);
+    }
+    
     MatrixType m_qr;
     HCoeffsType m_hCoeffs;
-    IntColVectorType m_rows_transpositions;
-    IntRowVectorType m_cols_transpositions;
+    IntDiagSizeVectorType m_rows_transpositions;
+    IntDiagSizeVectorType m_cols_transpositions;
     PermutationType m_cols_permutation;
     RowVectorType m_temp;
-    bool m_isInitialized;
+    bool m_isInitialized, m_usePrescribedThreshold;
+    RealScalar m_prescribedThreshold, m_maxpivot;
+    Index m_nonzero_pivots;
     RealScalar m_precision;
-    Index m_rank;
     Index m_det_pq;
 };
 
 template<typename MatrixType>
 typename MatrixType::RealScalar FullPivHouseholderQR<MatrixType>::absDeterminant() const
 {
-  ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-  ei_assert(m_qr.rows() == m_qr.cols() && "You can't take the determinant of a non-square matrix!");
-  return ei_abs(m_qr.diagonal().prod());
+  using std::abs;
+  eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+  eigen_assert(m_qr.rows() == m_qr.cols() && "You can't take the determinant of a non-square matrix!");
+  return abs(m_qr.diagonal().prod());
 }
 
 template<typename MatrixType>
 typename MatrixType::RealScalar FullPivHouseholderQR<MatrixType>::logAbsDeterminant() const
 {
-  ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-  ei_assert(m_qr.rows() == m_qr.cols() && "You can't take the determinant of a non-square matrix!");
+  eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+  eigen_assert(m_qr.rows() == m_qr.cols() && "You can't take the determinant of a non-square matrix!");
   return m_qr.diagonal().cwiseAbs().array().log().sum();
 }
 
+/** Performs the QR factorization of the given matrix \a matrix. The result of
+  * the factorization is stored into \c *this, and a reference to \c *this
+  * is returned.
+  *
+  * \sa class FullPivHouseholderQR, FullPivHouseholderQR(const MatrixType&)
+  */
 template<typename MatrixType>
 FullPivHouseholderQR<MatrixType>& FullPivHouseholderQR<MatrixType>::compute(const MatrixType& matrix)
 {
+  check_template_parameters();
+  
+  using std::abs;
   Index rows = matrix.rows();
   Index cols = matrix.cols();
-  Index size = std::min(rows,cols);
-  m_rank = size;
+  Index size = (std::min)(rows,cols);
 
   m_qr = matrix;
   m_hCoeffs.resize(size);
 
   m_temp.resize(cols);
 
-  m_precision = NumTraits<Scalar>::epsilon() * size;
+  m_precision = NumTraits<Scalar>::epsilon() * RealScalar(size);
 
-  m_rows_transpositions.resize(matrix.rows());
-  m_cols_transpositions.resize(matrix.cols());
+  m_rows_transpositions.resize(size);
+  m_cols_transpositions.resize(size);
   Index number_of_transpositions = 0;
 
   RealScalar biggest(0);
+
+  m_nonzero_pivots = size; // the generic case is that in which all pivots are nonzero (invertible case)
+  m_maxpivot = RealScalar(0);
 
   for (Index k = 0; k < size; ++k)
   {
@@ -326,9 +446,9 @@ FullPivHouseholderQR<MatrixType>& FullPivHouseholderQR<MatrixType>::compute(cons
     if(k==0) biggest = biggest_in_corner;
 
     // if the corner is negligible, then we have less than full rank, and we can finish early
-    if(ei_isMuchSmallerThan(biggest_in_corner, biggest, m_precision))
+    if(internal::isMuchSmallerThan(biggest_in_corner, biggest, m_precision))
     {
-      m_rank = k;
+      m_nonzero_pivots = k;
       for(Index i = k; i < size; i++)
       {
         m_rows_transpositions.coeffRef(i) = i;
@@ -353,6 +473,9 @@ FullPivHouseholderQR<MatrixType>& FullPivHouseholderQR<MatrixType>::compute(cons
     m_qr.col(k).tail(rows-k).makeHouseholderInPlace(m_hCoeffs.coeffRef(k), beta);
     m_qr.coeffRef(k,k) = beta;
 
+    // remember the maximum absolute value of diagonal coefficients
+    if(abs(beta) > m_maxpivot) m_maxpivot = abs(beta);
+
     m_qr.bottomRightCorner(rows-k, cols-k-1)
         .applyHouseholderOnTheLeft(m_qr.col(k).tail(rows-k-1), m_hCoeffs.coeffRef(k), &m_temp.coeffRef(k+1));
   }
@@ -367,16 +490,18 @@ FullPivHouseholderQR<MatrixType>& FullPivHouseholderQR<MatrixType>::compute(cons
   return *this;
 }
 
+namespace internal {
+
 template<typename _MatrixType, typename Rhs>
-struct ei_solve_retval<FullPivHouseholderQR<_MatrixType>, Rhs>
-  : ei_solve_retval_base<FullPivHouseholderQR<_MatrixType>, Rhs>
+struct solve_retval<FullPivHouseholderQR<_MatrixType>, Rhs>
+  : solve_retval_base<FullPivHouseholderQR<_MatrixType>, Rhs>
 {
   EIGEN_MAKE_SOLVE_HELPERS(FullPivHouseholderQR<_MatrixType>,Rhs)
 
   template<typename Dest> void evalTo(Dest& dst) const
   {
     const Index rows = dec().rows(), cols = dec().cols();
-    ei_assert(rhs().rows() == rows);
+    eigen_assert(rhs().rows() == rows);
 
     // FIXME introduce nonzeroPivots() and use it here. and more generally,
     // make the same improvements in this dec as in FullPivLU.
@@ -398,16 +523,6 @@ struct ei_solve_retval<FullPivHouseholderQR<_MatrixType>, Rhs>
                                   dec().hCoeffs().coeff(k), &temp.coeffRef(0));
     }
 
-    if(!dec().isSurjective())
-    {
-      // is c is in the image of R ?
-      RealScalar biggest_in_upper_part_of_c = c.topRows(   dec().rank()     ).cwiseAbs().maxCoeff();
-      RealScalar biggest_in_lower_part_of_c = c.bottomRows(rows-dec().rank()).cwiseAbs().maxCoeff();
-      // FIXME brain dead
-      const RealScalar m_precision = NumTraits<Scalar>::epsilon() * std::min(rows,cols);
-      if(!ei_isMuchSmallerThan(biggest_in_lower_part_of_c, biggest_in_upper_part_of_c, m_precision))
-        return;
-    }
     dec().matrixQR()
        .topLeftCorner(dec().rank(), dec().rank())
        .template triangularView<Upper>()
@@ -418,26 +533,74 @@ struct ei_solve_retval<FullPivHouseholderQR<_MatrixType>, Rhs>
   }
 };
 
-/** \returns the matrix Q */
-template<typename MatrixType>
-typename FullPivHouseholderQR<MatrixType>::MatrixQType FullPivHouseholderQR<MatrixType>::matrixQ() const
+/** \ingroup QR_Module
+  *
+  * \brief Expression type for return value of FullPivHouseholderQR::matrixQ()
+  *
+  * \tparam MatrixType type of underlying dense matrix
+  */
+template<typename MatrixType> struct FullPivHouseholderQRMatrixQReturnType
+  : public ReturnByValue<FullPivHouseholderQRMatrixQReturnType<MatrixType> >
 {
-  ei_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
-  // compute the product H'_0 H'_1 ... H'_n-1,
-  // where H_k is the k-th Householder transformation I - h_k v_k v_k'
-  // and v_k is the k-th Householder vector [1,m_qr(k+1,k), m_qr(k+2,k), ...]
-  Index rows = m_qr.rows();
-  Index cols = m_qr.cols();
-  Index size = std::min(rows,cols);
-  MatrixQType res = MatrixQType::Identity(rows, rows);
-  Matrix<Scalar,1,MatrixType::RowsAtCompileTime> temp(rows);
-  for (Index k = size-1; k >= 0; k--)
+public:
+  typedef typename MatrixType::Index Index;
+  typedef typename FullPivHouseholderQR<MatrixType>::IntDiagSizeVectorType IntDiagSizeVectorType;
+  typedef typename internal::plain_diag_type<MatrixType>::type HCoeffsType;
+  typedef Matrix<typename MatrixType::Scalar, 1, MatrixType::RowsAtCompileTime, RowMajor, 1,
+                 MatrixType::MaxRowsAtCompileTime> WorkVectorType;
+
+  FullPivHouseholderQRMatrixQReturnType(const MatrixType&       qr,
+                                        const HCoeffsType&      hCoeffs,
+                                        const IntDiagSizeVectorType& rowsTranspositions)
+    : m_qr(qr),
+      m_hCoeffs(hCoeffs),
+      m_rowsTranspositions(rowsTranspositions)
+      {}
+
+  template <typename ResultType>
+  void evalTo(ResultType& result) const
   {
-    res.block(k, k, rows-k, rows-k)
-       .applyHouseholderOnTheLeft(m_qr.col(k).tail(rows-k-1), ei_conj(m_hCoeffs.coeff(k)), &temp.coeffRef(k));
-    res.row(k).swap(res.row(m_rows_transpositions.coeff(k)));
+    const Index rows = m_qr.rows();
+    WorkVectorType workspace(rows);
+    evalTo(result, workspace);
   }
-  return res;
+
+  template <typename ResultType>
+  void evalTo(ResultType& result, WorkVectorType& workspace) const
+  {
+    using numext::conj;
+    // compute the product H'_0 H'_1 ... H'_n-1,
+    // where H_k is the k-th Householder transformation I - h_k v_k v_k'
+    // and v_k is the k-th Householder vector [1,m_qr(k+1,k), m_qr(k+2,k), ...]
+    const Index rows = m_qr.rows();
+    const Index cols = m_qr.cols();
+    const Index size = (std::min)(rows, cols);
+    workspace.resize(rows);
+    result.setIdentity(rows, rows);
+    for (Index k = size-1; k >= 0; k--)
+    {
+      result.block(k, k, rows-k, rows-k)
+            .applyHouseholderOnTheLeft(m_qr.col(k).tail(rows-k-1), conj(m_hCoeffs.coeff(k)), &workspace.coeffRef(k));
+      result.row(k).swap(result.row(m_rowsTranspositions.coeff(k)));
+    }
+  }
+
+    Index rows() const { return m_qr.rows(); }
+    Index cols() const { return m_qr.rows(); }
+
+protected:
+  typename MatrixType::Nested m_qr;
+  typename HCoeffsType::Nested m_hCoeffs;
+  typename IntDiagSizeVectorType::Nested m_rowsTranspositions;
+};
+
+} // end namespace internal
+
+template<typename MatrixType>
+inline typename FullPivHouseholderQR<MatrixType>::MatrixQReturnType FullPivHouseholderQR<MatrixType>::matrixQ() const
+{
+  eigen_assert(m_isInitialized && "FullPivHouseholderQR is not initialized.");
+  return MatrixQReturnType(m_qr, m_hCoeffs, m_rows_transpositions);
 }
 
 /** \return the full-pivoting Householder QR decomposition of \c *this.
@@ -450,5 +613,7 @@ MatrixBase<Derived>::fullPivHouseholderQr() const
 {
   return FullPivHouseholderQR<PlainObject>(eval());
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_FULLPIVOTINGHOUSEHOLDERQR_H

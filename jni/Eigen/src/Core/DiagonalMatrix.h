@@ -4,37 +4,25 @@
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 // Copyright (C) 2007-2009 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_DIAGONALMATRIX_H
 #define EIGEN_DIAGONALMATRIX_H
+
+namespace Eigen { 
 
 #ifndef EIGEN_PARSED_BY_DOXYGEN
 template<typename Derived>
 class DiagonalBase : public EigenBase<Derived>
 {
   public:
-    typedef typename ei_traits<Derived>::DiagonalVectorType DiagonalVectorType;
+    typedef typename internal::traits<Derived>::DiagonalVectorType DiagonalVectorType;
     typedef typename DiagonalVectorType::Scalar Scalar;
-    typedef typename ei_traits<Derived>::StorageKind StorageKind;
-    typedef typename ei_traits<Derived>::Index Index;
+    typedef typename DiagonalVectorType::RealScalar RealScalar;
+    typedef typename internal::traits<Derived>::StorageKind StorageKind;
+    typedef typename internal::traits<Derived>::Index Index;
 
     enum {
       RowsAtCompileTime = DiagonalVectorType::SizeAtCompileTime,
@@ -46,6 +34,8 @@ class DiagonalBase : public EigenBase<Derived>
     };
 
     typedef Matrix<Scalar, RowsAtCompileTime, ColsAtCompileTime, 0, MaxRowsAtCompileTime, MaxColsAtCompileTime> DenseMatrixType;
+    typedef DenseMatrixType DenseType;
+    typedef DiagonalMatrix<Scalar,DiagonalVectorType::SizeAtCompileTime,DiagonalVectorType::MaxSizeAtCompileTime> PlainObject;
 
     inline const Derived& derived() const { return *static_cast<const Derived*>(this); }
     inline Derived& derived() { return *static_cast<Derived*>(this); }
@@ -54,10 +44,10 @@ class DiagonalBase : public EigenBase<Derived>
     template<typename DenseDerived>
     void evalTo(MatrixBase<DenseDerived> &other) const;
     template<typename DenseDerived>
-    void addTo(MatrixBase<DenseDerived> &other) const
+    inline void addTo(MatrixBase<DenseDerived> &other) const
     { other.diagonal() += diagonal(); }
     template<typename DenseDerived>
-    void subTo(MatrixBase<DenseDerived> &other) const
+    inline void subTo(MatrixBase<DenseDerived> &other) const
     { other.diagonal() -= diagonal(); }
 
     inline const DiagonalVectorType& diagonal() const { return derived().diagonal(); }
@@ -66,20 +56,49 @@ class DiagonalBase : public EigenBase<Derived>
     inline Index rows() const { return diagonal().size(); }
     inline Index cols() const { return diagonal().size(); }
 
+    /** \returns the diagonal matrix product of \c *this by the matrix \a matrix.
+      */
     template<typename MatrixDerived>
     const DiagonalProduct<MatrixDerived, Derived, OnTheLeft>
-    operator*(const MatrixBase<MatrixDerived> &matrix) const;
+    operator*(const MatrixBase<MatrixDerived> &matrix) const
+    {
+      return DiagonalProduct<MatrixDerived, Derived, OnTheLeft>(matrix.derived(), derived());
+    }
 
-    inline const DiagonalWrapper<CwiseUnaryOp<ei_scalar_inverse_op<Scalar>, DiagonalVectorType> >
+    inline const DiagonalWrapper<const CwiseUnaryOp<internal::scalar_inverse_op<Scalar>, const DiagonalVectorType> >
     inverse() const
     {
       return diagonal().cwiseInverse();
     }
+    
+    inline const DiagonalWrapper<const CwiseUnaryOp<internal::scalar_multiple_op<Scalar>, const DiagonalVectorType> >
+    operator*(const Scalar& scalar) const
+    {
+      return diagonal() * scalar;
+    }
+    friend inline const DiagonalWrapper<const CwiseUnaryOp<internal::scalar_multiple_op<Scalar>, const DiagonalVectorType> >
+    operator*(const Scalar& scalar, const DiagonalBase& other)
+    {
+      return other.diagonal() * scalar;
+    }
+    
+    #ifdef EIGEN2_SUPPORT
+    template<typename OtherDerived>
+    bool isApprox(const DiagonalBase<OtherDerived>& other, typename NumTraits<Scalar>::Real precision = NumTraits<Scalar>::dummy_precision()) const
+    {
+      return diagonal().isApprox(other.diagonal(), precision);
+    }
+    template<typename OtherDerived>
+    bool isApprox(const MatrixBase<OtherDerived>& other, typename NumTraits<Scalar>::Real precision = NumTraits<Scalar>::dummy_precision()) const
+    {
+      return toDenseMatrix().isApprox(other, precision);
+    }
+    #endif
 };
 
 template<typename Derived>
 template<typename DenseDerived>
-void DiagonalBase<Derived>::evalTo(MatrixBase<DenseDerived> &other) const
+inline void DiagonalBase<Derived>::evalTo(MatrixBase<DenseDerived> &other) const
 {
   other.setZero();
   other.diagonal() = diagonal();
@@ -98,9 +117,11 @@ void DiagonalBase<Derived>::evalTo(MatrixBase<DenseDerived> &other) const
   *
   * \sa class DiagonalWrapper
   */
+
+namespace internal {
 template<typename _Scalar, int SizeAtCompileTime, int MaxSizeAtCompileTime>
-struct ei_traits<DiagonalMatrix<_Scalar,SizeAtCompileTime,MaxSizeAtCompileTime> >
- : ei_traits<Matrix<_Scalar,SizeAtCompileTime,SizeAtCompileTime,0,MaxSizeAtCompileTime,MaxSizeAtCompileTime> >
+struct traits<DiagonalMatrix<_Scalar,SizeAtCompileTime,MaxSizeAtCompileTime> >
+ : traits<Matrix<_Scalar,SizeAtCompileTime,SizeAtCompileTime,0,MaxSizeAtCompileTime,MaxSizeAtCompileTime> >
 {
   typedef Matrix<_Scalar,SizeAtCompileTime,1,0,MaxSizeAtCompileTime,1> DiagonalVectorType;
   typedef Dense StorageKind;
@@ -109,18 +130,18 @@ struct ei_traits<DiagonalMatrix<_Scalar,SizeAtCompileTime,MaxSizeAtCompileTime> 
     Flags = LvalueBit
   };
 };
-
+}
 template<typename _Scalar, int SizeAtCompileTime, int MaxSizeAtCompileTime>
 class DiagonalMatrix
   : public DiagonalBase<DiagonalMatrix<_Scalar,SizeAtCompileTime,MaxSizeAtCompileTime> >
 {
   public:
     #ifndef EIGEN_PARSED_BY_DOXYGEN
-    typedef typename ei_traits<DiagonalMatrix>::DiagonalVectorType DiagonalVectorType;
+    typedef typename internal::traits<DiagonalMatrix>::DiagonalVectorType DiagonalVectorType;
     typedef const DiagonalMatrix& Nested;
     typedef _Scalar Scalar;
-    typedef typename ei_traits<DiagonalMatrix>::StorageKind StorageKind;
-    typedef typename ei_traits<DiagonalMatrix>::Index Index;
+    typedef typename internal::traits<DiagonalMatrix>::StorageKind StorageKind;
+    typedef typename internal::traits<DiagonalMatrix>::Index Index;
     #endif
 
   protected:
@@ -204,8 +225,10 @@ class DiagonalMatrix
   *
   * \sa class DiagonalMatrix, class DiagonalBase, MatrixBase::asDiagonal()
   */
+
+namespace internal {
 template<typename _DiagonalVectorType>
-struct ei_traits<DiagonalWrapper<_DiagonalVectorType> >
+struct traits<DiagonalWrapper<_DiagonalVectorType> >
 {
   typedef _DiagonalVectorType DiagonalVectorType;
   typedef typename DiagonalVectorType::Scalar Scalar;
@@ -216,13 +239,14 @@ struct ei_traits<DiagonalWrapper<_DiagonalVectorType> >
     ColsAtCompileTime = DiagonalVectorType::SizeAtCompileTime,
     MaxRowsAtCompileTime = DiagonalVectorType::SizeAtCompileTime,
     MaxColsAtCompileTime = DiagonalVectorType::SizeAtCompileTime,
-    Flags =  ei_traits<DiagonalVectorType>::Flags & LvalueBit
+    Flags =  traits<DiagonalVectorType>::Flags & LvalueBit
   };
 };
+}
 
 template<typename _DiagonalVectorType>
 class DiagonalWrapper
-  : public DiagonalBase<DiagonalWrapper<_DiagonalVectorType> >, ei_no_assignment_operator
+  : public DiagonalBase<DiagonalWrapper<_DiagonalVectorType> >, internal::no_assignment_operator
 {
   public:
     #ifndef EIGEN_PARSED_BY_DOXYGEN
@@ -231,13 +255,13 @@ class DiagonalWrapper
     #endif
 
     /** Constructor from expression of diagonal coefficients to wrap. */
-    inline DiagonalWrapper(const DiagonalVectorType& diagonal) : m_diagonal(diagonal) {}
+    inline DiagonalWrapper(DiagonalVectorType& a_diagonal) : m_diagonal(a_diagonal) {}
 
     /** \returns a const reference to the wrapped expression of diagonal coefficients. */
     const DiagonalVectorType& diagonal() const { return m_diagonal; }
 
   protected:
-    const typename DiagonalVectorType::Nested m_diagonal;
+    typename DiagonalVectorType::Nested m_diagonal;
 };
 
 /** \returns a pseudo-expression of a diagonal matrix with *this as vector of diagonal coefficients
@@ -250,7 +274,7 @@ class DiagonalWrapper
   * \sa class DiagonalWrapper, class DiagonalMatrix, diagonal(), isDiagonal()
   **/
 template<typename Derived>
-inline const DiagonalWrapper<Derived>
+inline const DiagonalWrapper<const Derived>
 MatrixBase<Derived>::asDiagonal() const
 {
   return derived();
@@ -265,23 +289,25 @@ MatrixBase<Derived>::asDiagonal() const
   * \sa asDiagonal()
   */
 template<typename Derived>
-bool MatrixBase<Derived>::isDiagonal
-(RealScalar prec) const
+bool MatrixBase<Derived>::isDiagonal(const RealScalar& prec) const
 {
+  using std::abs;
   if(cols() != rows()) return false;
   RealScalar maxAbsOnDiagonal = static_cast<RealScalar>(-1);
   for(Index j = 0; j < cols(); ++j)
   {
-    RealScalar absOnDiagonal = ei_abs(coeff(j,j));
+    RealScalar absOnDiagonal = abs(coeff(j,j));
     if(absOnDiagonal > maxAbsOnDiagonal) maxAbsOnDiagonal = absOnDiagonal;
   }
   for(Index j = 0; j < cols(); ++j)
     for(Index i = 0; i < j; ++i)
     {
-      if(!ei_isMuchSmallerThan(coeff(i, j), maxAbsOnDiagonal, prec)) return false;
-      if(!ei_isMuchSmallerThan(coeff(j, i), maxAbsOnDiagonal, prec)) return false;
+      if(!internal::isMuchSmallerThan(coeff(i, j), maxAbsOnDiagonal, prec)) return false;
+      if(!internal::isMuchSmallerThan(coeff(j, i), maxAbsOnDiagonal, prec)) return false;
     }
   return true;
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_DIAGONALMATRIX_H

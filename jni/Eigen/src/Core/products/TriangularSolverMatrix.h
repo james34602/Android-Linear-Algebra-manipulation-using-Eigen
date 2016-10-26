@@ -3,103 +3,110 @@
 //
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_TRIANGULAR_SOLVER_MATRIX_H
 #define EIGEN_TRIANGULAR_SOLVER_MATRIX_H
 
+namespace Eigen { 
+
+namespace internal {
+
 // if the rhs is row major, let's transpose the product
 template <typename Scalar, typename Index, int Side, int Mode, bool Conjugate, int TriStorageOrder>
-struct ei_triangular_solve_matrix<Scalar,Index,Side,Mode,Conjugate,TriStorageOrder,RowMajor>
+struct triangular_solve_matrix<Scalar,Index,Side,Mode,Conjugate,TriStorageOrder,RowMajor>
 {
-  static EIGEN_DONT_INLINE void run(
+  static void run(
     Index size, Index cols,
     const Scalar*  tri, Index triStride,
-    Scalar* _other, Index otherStride)
+    Scalar* _other, Index otherStride,
+    level3_blocking<Scalar,Scalar>& blocking)
   {
-    ei_triangular_solve_matrix<
+    triangular_solve_matrix<
       Scalar, Index, Side==OnTheLeft?OnTheRight:OnTheLeft,
       (Mode&UnitDiag) | ((Mode&Upper) ? Lower : Upper),
       NumTraits<Scalar>::IsComplex && Conjugate,
       TriStorageOrder==RowMajor ? ColMajor : RowMajor, ColMajor>
-      ::run(size, cols, tri, triStride, _other, otherStride);
+      ::run(size, cols, tri, triStride, _other, otherStride, blocking);
   }
 };
 
 /* Optimized triangular solver with multiple right hand side and the triangular matrix on the left
  */
 template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder>
-struct ei_triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStorageOrder,ColMajor>
+struct triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStorageOrder,ColMajor>
 {
   static EIGEN_DONT_INLINE void run(
     Index size, Index otherSize,
     const Scalar* _tri, Index triStride,
-    Scalar* _other, Index otherStride)
+    Scalar* _other, Index otherStride,
+    level3_blocking<Scalar,Scalar>& blocking);
+};
+template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder>
+EIGEN_DONT_INLINE void triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStorageOrder,ColMajor>::run(
+    Index size, Index otherSize,
+    const Scalar* _tri, Index triStride,
+    Scalar* _other, Index otherStride,
+    level3_blocking<Scalar,Scalar>& blocking)
   {
     Index cols = otherSize;
-    ei_const_blas_data_mapper<Scalar, Index, TriStorageOrder> tri(_tri,triStride);
-    ei_blas_data_mapper<Scalar, Index, ColMajor> other(_other,otherStride);
+    const_blas_data_mapper<Scalar, Index, TriStorageOrder> tri(_tri,triStride);
+    blas_data_mapper<Scalar, Index, ColMajor> other(_other,otherStride);
 
-    typedef ei_gebp_traits<Scalar,Scalar> Traits;
+    typedef gebp_traits<Scalar,Scalar> Traits;
     enum {
       SmallPanelWidth   = EIGEN_PLAIN_ENUM_MAX(Traits::mr,Traits::nr),
       IsLower = (Mode&Lower) == Lower
     };
 
-    Index kc = size; // cache block size along the K direction
-    Index mc = size;  // cache block size along the M direction
-    Index nc = cols;  // cache block size along the N direction
-    computeProductBlockingSizes<Scalar,Scalar,4>(kc, mc, nc);
+    Index kc = blocking.kc();                   // cache block size along the K direction
+    Index mc = (std::min)(size,blocking.mc());  // cache block size along the M direction
 
-    Scalar* blockA = ei_aligned_stack_new(Scalar, kc*mc);
+    std::size_t sizeA = kc*mc;
+    std::size_t sizeB = kc*cols;
     std::size_t sizeW = kc*Traits::WorkSpaceFactor;
-    std::size_t sizeB = sizeW + kc*cols;
-    Scalar* allocatedBlockB = ei_aligned_stack_new(Scalar, sizeB);
-    Scalar* blockB = allocatedBlockB + sizeW;
 
-    ei_conj_if<Conjugate> conj;
-    ei_gebp_kernel<Scalar, Scalar, Index, Traits::mr, Traits::nr, Conjugate, false> gebp_kernel;
-    ei_gemm_pack_lhs<Scalar, Index, Traits::mr, Traits::LhsProgress, TriStorageOrder> pack_lhs;
-    ei_gemm_pack_rhs<Scalar, Index, Traits::nr, ColMajor, false, true> pack_rhs;
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockA, sizeA, blocking.blockA());
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockB, sizeB, blocking.blockB());
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockW, sizeW, blocking.blockW());
+
+    conj_if<Conjugate> conj;
+    gebp_kernel<Scalar, Scalar, Index, Traits::mr, Traits::nr, Conjugate, false> gebp_kernel;
+    gemm_pack_lhs<Scalar, Index, Traits::mr, Traits::LhsProgress, TriStorageOrder> pack_lhs;
+    gemm_pack_rhs<Scalar, Index, Traits::nr, ColMajor, false, true> pack_rhs;
+
+    // the goal here is to subdivise the Rhs panels such that we keep some cache
+    // coherence when accessing the rhs elements
+    std::ptrdiff_t l1, l2;
+    manage_caching_sizes(GetAction, &l1, &l2);
+    Index subcols = cols>0 ? l2/(4 * sizeof(Scalar) *  std::max<Index>(otherStride,size)) : 0;
+    subcols = std::max<Index>((subcols/Traits::nr)*Traits::nr, Traits::nr);
 
     for(Index k2=IsLower ? 0 : size;
         IsLower ? k2<size : k2>0;
         IsLower ? k2+=kc : k2-=kc)
     {
-      const Index actual_kc = std::min(IsLower ? size-k2 : k2, kc);
+      const Index actual_kc = (std::min)(IsLower ? size-k2 : k2, kc);
 
       // We have selected and packed a big horizontal panel R1 of rhs. Let B be the packed copy of this panel,
       // and R2 the remaining part of rhs. The corresponding vertical panel of lhs is split into
       // A11 (the triangular part) and A21 the remaining rectangular part.
       // Then the high level algorithm is:
       //  - B = R1                    => general block copy (done during the next step)
-      //  - R1 = L1^-1 B              => tricky part
+      //  - R1 = A11^-1 B             => tricky part
       //  - update B from the new R1  => actually this has to be performed continuously during the above step
-      //  - R2 = L2 * B               => GEPP
+      //  - R2 -= A21 * B             => GEPP
 
-      // The tricky part: compute R1 = L1^-1 B while updating B from R1
-      // The idea is to split L1 into multiple small vertical panels.
-      // Each panel can be split into a small triangular part A1 which is processed without optimization,
-      // and the remaining small part A2 which is processed using gebp with appropriate block strides
+      // The tricky part: compute R1 = A11^-1 B while updating B from R1
+      // The idea is to split A11 into multiple small vertical panels.
+      // Each panel can be split into a small triangular part T1k which is processed without optimization,
+      // and the remaining small part T2k which is processed using gebp with appropriate block strides
+      for(Index j2=0; j2<cols; j2+=subcols)
       {
-        // for each small vertical panels of lhs
+        Index actual_cols = (std::min)(cols-j2,subcols);
+        // for each small vertical panels [T1k^T, T2k^T]^T of lhs
         for (Index k1=0; k1<actual_kc; k1+=SmallPanelWidth)
         {
           Index actualPanelWidth = std::min<Index>(actual_kc-k1, SmallPanelWidth);
@@ -108,15 +115,16 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStora
           {
             // TODO write a small kernel handling this (can be shared with trsv)
             Index i  = IsLower ? k2+k1+k : k2-k1-k-1;
-            Index s  = IsLower ? k2+k1 : i+1;
             Index rs = actualPanelWidth - k - 1; // remaining size
+            Index s  = TriStorageOrder==RowMajor ? (IsLower ? k2+k1 : i+1)
+                                                 :  IsLower ? i+1 : i-rs;
 
             Scalar a = (Mode & UnitDiag) ? Scalar(1) : Scalar(1)/conj(tri(i,i));
-            for (Index j=0; j<cols; ++j)
+            for (Index j=j2; j<j2+actual_cols; ++j)
             {
               if (TriStorageOrder==RowMajor)
               {
-                Scalar b = 0;
+                Scalar b(0);
                 const Scalar* l = &tri(i,s);
                 Scalar* r = &other(s,j);
                 for (Index i3=0; i3<k; ++i3)
@@ -126,7 +134,6 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStora
               }
               else
               {
-                Index s = IsLower ? i+1 : i-rs;
                 Scalar b = (other(i,j) *= a);
                 Scalar* r = &other(s,j);
                 const Scalar* l = &tri(s,i);
@@ -141,7 +148,7 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStora
           Index blockBOffset = IsLower ? k1 : lengthTarget;
 
           // update the respective rows of B from other
-          pack_rhs(blockB, _other+startBlock, otherStride, actualPanelWidth, cols, actual_kc, blockBOffset);
+          pack_rhs(blockB+actual_kc*j2, &other(startBlock,j2), otherStride, actualPanelWidth, actual_cols, actual_kc, blockBOffset);
 
           // GEBP
           if (lengthTarget>0)
@@ -150,80 +157,81 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheLeft,Mode,Conjugate,TriStora
 
             pack_lhs(blockA, &tri(startTarget,startBlock), triStride, actualPanelWidth, lengthTarget);
 
-            gebp_kernel(_other+startTarget, otherStride, blockA, blockB, lengthTarget, actualPanelWidth, cols, Scalar(-1),
-                        actualPanelWidth, actual_kc, 0, blockBOffset);
+            gebp_kernel(&other(startTarget,j2), otherStride, blockA, blockB+actual_kc*j2, lengthTarget, actualPanelWidth, actual_cols, Scalar(-1),
+                        actualPanelWidth, actual_kc, 0, blockBOffset, blockW);
           }
         }
       }
-
-      // R2 = A2 * B => GEPP
+      
+      // R2 -= A21 * B => GEPP
       {
         Index start = IsLower ? k2+kc : 0;
         Index end   = IsLower ? size : k2-kc;
         for(Index i2=start; i2<end; i2+=mc)
         {
-          const Index actual_mc = std::min(mc,end-i2);
+          const Index actual_mc = (std::min)(mc,end-i2);
           if (actual_mc>0)
           {
             pack_lhs(blockA, &tri(i2, IsLower ? k2 : k2-kc), triStride, actual_kc, actual_mc);
 
-            gebp_kernel(_other+i2, otherStride, blockA, blockB, actual_mc, actual_kc, cols, Scalar(-1));
+            gebp_kernel(_other+i2, otherStride, blockA, blockB, actual_mc, actual_kc, cols, Scalar(-1), -1, -1, 0, 0, blockW);
           }
         }
       }
     }
-
-    ei_aligned_stack_delete(Scalar, blockA, kc*mc);
-    ei_aligned_stack_delete(Scalar, allocatedBlockB, sizeB);
   }
-};
 
 /* Optimized triangular solver with multiple left hand sides and the trinagular matrix on the right
  */
 template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder>
-struct ei_triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStorageOrder,ColMajor>
+struct triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStorageOrder,ColMajor>
 {
   static EIGEN_DONT_INLINE void run(
     Index size, Index otherSize,
     const Scalar* _tri, Index triStride,
-    Scalar* _other, Index otherStride)
+    Scalar* _other, Index otherStride,
+    level3_blocking<Scalar,Scalar>& blocking);
+};
+template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder>
+EIGEN_DONT_INLINE void triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStorageOrder,ColMajor>::run(
+    Index size, Index otherSize,
+    const Scalar* _tri, Index triStride,
+    Scalar* _other, Index otherStride,
+    level3_blocking<Scalar,Scalar>& blocking)
   {
     Index rows = otherSize;
-    ei_const_blas_data_mapper<Scalar, Index, TriStorageOrder> rhs(_tri,triStride);
-    ei_blas_data_mapper<Scalar, Index, ColMajor> lhs(_other,otherStride);
+    const_blas_data_mapper<Scalar, Index, TriStorageOrder> rhs(_tri,triStride);
+    blas_data_mapper<Scalar, Index, ColMajor> lhs(_other,otherStride);
 
-    typedef ei_gebp_traits<Scalar,Scalar> Traits;
+    typedef gebp_traits<Scalar,Scalar> Traits;
     enum {
       RhsStorageOrder   = TriStorageOrder,
       SmallPanelWidth   = EIGEN_PLAIN_ENUM_MAX(Traits::mr,Traits::nr),
       IsLower = (Mode&Lower) == Lower
     };
 
-//     Index kc = std::min<Index>(Traits::Max_kc/4,size); // cache block size along the K direction
-//     Index mc = std::min<Index>(Traits::Max_mc,size);   // cache block size along the M direction
-    // check that !!!!
-    Index kc = size; // cache block size along the K direction
-    Index mc = size;  // cache block size along the M direction
-    Index nc = rows;  // cache block size along the N direction
-    computeProductBlockingSizes<Scalar,Scalar,4>(kc, mc, nc);
+    Index kc = blocking.kc();                   // cache block size along the K direction
+    Index mc = (std::min)(rows,blocking.mc());  // cache block size along the M direction
 
-    Scalar* blockA = ei_aligned_stack_new(Scalar, kc*mc);
+    std::size_t sizeA = kc*mc;
+    std::size_t sizeB = kc*size;
     std::size_t sizeW = kc*Traits::WorkSpaceFactor;
-    std::size_t sizeB = sizeW + kc*size;
-    Scalar* allocatedBlockB = ei_aligned_stack_new(Scalar, sizeB);
-    Scalar* blockB = allocatedBlockB + sizeW;
 
-    ei_conj_if<Conjugate> conj;
-    ei_gebp_kernel<Scalar,Scalar, Index, Traits::mr, Traits::nr, false, Conjugate> gebp_kernel;
-    ei_gemm_pack_rhs<Scalar, Index, Traits::nr,RhsStorageOrder> pack_rhs;
-    ei_gemm_pack_rhs<Scalar, Index, Traits::nr,RhsStorageOrder,false,true> pack_rhs_panel;
-    ei_gemm_pack_lhs<Scalar, Index, Traits::mr, Traits::LhsProgress, ColMajor, false, true> pack_lhs_panel;
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockA, sizeA, blocking.blockA());
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockB, sizeB, blocking.blockB());
+    ei_declare_aligned_stack_constructed_variable(Scalar, blockW, sizeW, blocking.blockW());
+
+    conj_if<Conjugate> conj;
+    gebp_kernel<Scalar,Scalar, Index, Traits::mr, Traits::nr, false, Conjugate> gebp_kernel;
+    gemm_pack_rhs<Scalar, Index, Traits::nr,RhsStorageOrder> pack_rhs;
+    gemm_pack_rhs<Scalar, Index, Traits::nr,RhsStorageOrder,false,true> pack_rhs_panel;
+    gemm_pack_lhs<Scalar, Index, Traits::mr, Traits::LhsProgress, ColMajor, false, true> pack_lhs_panel;
 
     for(Index k2=IsLower ? size : 0;
         IsLower ? k2>0 : k2<size;
         IsLower ? k2-=kc : k2+=kc)
     {
-      const Index actual_kc = std::min(IsLower ? k2 : size-k2, kc);
+      const Index actual_kc = (std::min)(IsLower ? k2 : size-k2, kc);
       Index actual_k2 = IsLower ? k2-actual_kc : k2 ;
 
       Index startPanel = IsLower ? 0 : k2+actual_kc;
@@ -252,7 +260,7 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStor
 
       for(Index i2=0; i2<rows; i2+=mc)
       {
-        const Index actual_mc = std::min(mc,rows-i2);
+        const Index actual_mc = (std::min)(mc,rows-i2);
 
         // triangular solver kernel
         {
@@ -278,7 +286,7 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStor
                           Scalar(-1),
                           actual_kc, actual_kc, // strides
                           panelOffset, panelOffset, // offsets
-                          allocatedBlockB);  // workspace
+                          blockW);  // workspace
             }
 
             // unblocked triangular solve
@@ -294,9 +302,12 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStor
                 for (Index i=0; i<actual_mc; ++i)
                   r[i] -= a[i] * b;
               }
-              Scalar b = (Mode & UnitDiag) ? Scalar(1) : Scalar(1)/conj(rhs(j,j));
-              for (Index i=0; i<actual_mc; ++i)
-                r[i] *= b;
+              if((Mode & UnitDiag)==0)
+              {
+                Scalar b = conj(rhs(j,j));
+                for (Index i=0; i<actual_mc; ++i)
+                  r[i] /= b;
+              }
             }
 
             // pack the just computed part of lhs to A
@@ -309,13 +320,13 @@ struct ei_triangular_solve_matrix<Scalar,Index,OnTheRight,Mode,Conjugate,TriStor
         if (rs>0)
           gebp_kernel(_other+i2+startPanel*otherStride, otherStride, blockA, geb,
                       actual_mc, actual_kc, rs, Scalar(-1),
-                      -1, -1, 0, 0, allocatedBlockB);
+                      -1, -1, 0, 0, blockW);
       }
     }
-
-    ei_aligned_stack_delete(Scalar, blockA, kc*mc);
-    ei_aligned_stack_delete(Scalar, allocatedBlockB, sizeB);
   }
-};
+
+} // end namespace internal
+
+} // end namespace Eigen
 
 #endif // EIGEN_TRIANGULAR_SOLVER_MATRIX_H

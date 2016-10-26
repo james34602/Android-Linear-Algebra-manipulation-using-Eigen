@@ -3,9 +3,7 @@
 
 #include "Core"
 
-#include "src/Core/util/DisableMSVCWarnings.h"
-
-namespace Eigen {
+#include "src/Core/util/DisableStupidWarnings.h"
 
 /** \defgroup Cholesky_Module Cholesky module
   *
@@ -24,10 +22,11 @@ namespace Eigen {
 #include "src/misc/Solve.h"
 #include "src/Cholesky/LLT.h"
 #include "src/Cholesky/LDLT.h"
+#ifdef EIGEN_USE_LAPACKE
+#include "src/Cholesky/LLT_MKL.h"
+#endif
 
-} // namespace Eigen
-
-#include "src/Core/util/EnableMSVCWarnings.h"
+#include "src/Core/util/ReenableStupidWarnings.h"
 
 #endif // EIGEN_CHOLESKY_MODULE_H
 /* vim: set filetype=cpp et sw=2 ts=2 ai: */

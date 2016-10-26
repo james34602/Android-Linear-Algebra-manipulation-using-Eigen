@@ -4,24 +4,9 @@
 // Copyright (C) 2008-2010 Gael Guennebaud <gael.guennebaud@inria.fr>
 // Copyright (C) 2006-2008 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
 /* All the parameters defined in this file can be specialized in the
@@ -44,15 +29,6 @@
   */
 #ifndef EIGEN_CACHEFRIENDLY_PRODUCT_THRESHOLD
 #define EIGEN_CACHEFRIENDLY_PRODUCT_THRESHOLD 8
-#endif
-
-/** Defines the maximal size in Bytes of blocks fitting in CPU cache.
-  * The current value is set to generate blocks of 256x256 for float
-  *
-  * Typically for a single-threaded application you would set that to 25% of the size of your CPU caches in bytes
-  */
-#ifndef EIGEN_TUNE_FOR_CPU_CACHE_SIZE
-#define EIGEN_TUNE_FOR_CPU_CACHE_SIZE (sizeof(float)*512*512)
 #endif
 
 /** Defines the maximal width of the blocks used in the triangular product and solver

@@ -3,30 +3,28 @@
 //
 // Copyright (C) 2008-2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_SOLVETRIANGULAR_H
 #define EIGEN_SOLVETRIANGULAR_H
 
+namespace Eigen { 
+
+namespace internal {
+
+// Forward declarations:
+// The following two routines are implemented in the products/TriangularSolver*.h files
+template<typename LhsScalar, typename RhsScalar, typename Index, int Side, int Mode, bool Conjugate, int StorageOrder>
+struct triangular_solve_vector;
+
+template <typename Scalar, typename Index, int Side, int Mode, bool Conjugate, int TriStorageOrder, int OtherStorageOrder>
+struct triangular_solve_matrix;
+
+// small helper struct extracting some traits on the underlying solver operation
 template<typename Lhs, typename Rhs, int Side>
-class ei_trsolve_traits
+class trsolve_traits
 {
   private:
     enum {
@@ -43,150 +41,66 @@ class ei_trsolve_traits
 template<typename Lhs, typename Rhs,
   int Side, // can be OnTheLeft/OnTheRight
   int Mode, // can be Upper/Lower | UnitDiag
-  int Unrolling = ei_trsolve_traits<Lhs,Rhs,Side>::Unrolling,
-  int StorageOrder = (int(Lhs::Flags) & RowMajorBit) ? RowMajor : ColMajor,
-  int RhsVectors = ei_trsolve_traits<Lhs,Rhs,Side>::RhsVectors
+  int Unrolling = trsolve_traits<Lhs,Rhs,Side>::Unrolling,
+  int RhsVectors = trsolve_traits<Lhs,Rhs,Side>::RhsVectors
   >
-struct ei_triangular_solver_selector;
+struct triangular_solver_selector;
 
-// forward and backward substitution, row-major, rhs is a vector
-template<typename Lhs, typename Rhs, int Mode>
-struct ei_triangular_solver_selector<Lhs,Rhs,OnTheLeft,Mode,NoUnrolling,RowMajor,1>
+template<typename Lhs, typename Rhs, int Side, int Mode>
+struct triangular_solver_selector<Lhs,Rhs,Side,Mode,NoUnrolling,1>
 {
   typedef typename Lhs::Scalar LhsScalar;
   typedef typename Rhs::Scalar RhsScalar;
-  typedef ei_blas_traits<Lhs> LhsProductTraits;
+  typedef blas_traits<Lhs> LhsProductTraits;
   typedef typename LhsProductTraits::ExtractType ActualLhsType;
-  typedef typename Lhs::Index Index;
-  enum {
-    IsLower = ((Mode&Lower)==Lower)
-  };
-  static void run(const Lhs& lhs, Rhs& other)
-  {
-    static const Index PanelWidth = EIGEN_TUNE_TRIANGULAR_PANEL_WIDTH;
-    ActualLhsType actualLhs = LhsProductTraits::extract(lhs);
-
-    const Index size = lhs.cols();
-    for(Index pi=IsLower ? 0 : size;
-        IsLower ? pi<size : pi>0;
-        IsLower ? pi+=PanelWidth : pi-=PanelWidth)
-    {
-      Index actualPanelWidth = std::min(IsLower ? size - pi : pi, PanelWidth);
-
-      Index r = IsLower ? pi : size - pi; // remaining size
-      if (r > 0)
-      {
-        // let's directly call the low level product function because:
-        // 1 - it is faster to compile
-        // 2 - it is slighlty faster at runtime
-        Index startRow = IsLower ? pi : pi-actualPanelWidth;
-        Index startCol = IsLower ? 0 : pi;
-
-        ei_general_matrix_vector_product<Index,LhsScalar,RowMajor,LhsProductTraits::NeedToConjugate,RhsScalar,false>::run(
-          actualPanelWidth, r,
-          &(actualLhs.const_cast_derived().coeffRef(startRow,startCol)), actualLhs.outerStride(),
-          &(other.coeffRef(startCol)), other.innerStride(),
-          &other.coeffRef(startRow), other.innerStride(),
-          RhsScalar(-1));
-      }
-
-      for(Index k=0; k<actualPanelWidth; ++k)
-      {
-        Index i = IsLower ? pi+k : pi-k-1;
-        Index s = IsLower ? pi : i+1;
-        if (k>0)
-          other.coeffRef(i) -= (lhs.row(i).segment(s,k).transpose().cwiseProduct(other.segment(s,k))).sum();
-
-        if(!(Mode & UnitDiag))
-          other.coeffRef(i) /= lhs.coeff(i,i);
-      }
-    }
-  }
-};
-
-// forward and backward substitution, column-major, rhs is a vector
-template<typename Lhs, typename Rhs, int Mode>
-struct ei_triangular_solver_selector<Lhs,Rhs,OnTheLeft,Mode,NoUnrolling,ColMajor,1>
-{
-  typedef typename Lhs::Scalar LhsScalar;
-  typedef typename Rhs::Scalar RhsScalar;
-  typedef ei_blas_traits<Lhs> LhsProductTraits;
-  typedef typename LhsProductTraits::ExtractType ActualLhsType;
-  typedef typename Lhs::Index Index;
-  enum {
-    IsLower = ((Mode&Lower)==Lower)
-  };
-
-  static void run(const Lhs& lhs, Rhs& other)
-  {
-    static const Index PanelWidth = EIGEN_TUNE_TRIANGULAR_PANEL_WIDTH;
-    ActualLhsType actualLhs = LhsProductTraits::extract(lhs);
-
-    const Index size = lhs.cols();
-    for(Index pi=IsLower ? 0 : size;
-        IsLower ? pi<size : pi>0;
-        IsLower ? pi+=PanelWidth : pi-=PanelWidth)
-    {
-      Index actualPanelWidth = std::min(IsLower ? size - pi : pi, PanelWidth);
-      Index startBlock = IsLower ? pi : pi-actualPanelWidth;
-      Index endBlock = IsLower ? pi + actualPanelWidth : 0;
-
-      for(Index k=0; k<actualPanelWidth; ++k)
-      {
-        Index i = IsLower ? pi+k : pi-k-1;
-        if(!(Mode & UnitDiag))
-          other.coeffRef(i) /= lhs.coeff(i,i);
-
-        Index r = actualPanelWidth - k - 1; // remaining size
-        Index s = IsLower ? i+1 : i-r;
-        if (r>0)
-          other.segment(s,r) -= other.coeffRef(i) * Block<Lhs,Dynamic,1>(lhs, s, i, r, 1);
-      }
-      Index r = IsLower ? size - endBlock : startBlock; // remaining size
-      if (r > 0)
-      {
-        // let's directly call the low level product function because:
-        // 1 - it is faster to compile
-        // 2 - it is slighlty faster at runtime
-        ei_general_matrix_vector_product<Index,LhsScalar,ColMajor,LhsProductTraits::NeedToConjugate,RhsScalar,false>::run(
-            r, actualPanelWidth,
-            &(actualLhs.const_cast_derived().coeffRef(endBlock,startBlock)), actualLhs.outerStride(),
-            &other.coeff(startBlock), other.innerStride(),
-            &(other.coeffRef(endBlock, 0)), other.innerStride(), RhsScalar(-1));
-      }
-    }
-  }
-};
-
-// transpose OnTheRight cases for vectors
-template<typename Lhs, typename Rhs, int Mode, int Unrolling, int StorageOrder>
-struct ei_triangular_solver_selector<Lhs,Rhs,OnTheRight,Mode,Unrolling,StorageOrder,1>
-{
+  typedef Map<Matrix<RhsScalar,Dynamic,1>, Aligned> MappedRhs;
   static void run(const Lhs& lhs, Rhs& rhs)
   {
-    Transpose<Rhs> rhsTr(rhs);
-    Transpose<Lhs> lhsTr(lhs);
-    ei_triangular_solver_selector<Transpose<Lhs>,Transpose<Rhs>,OnTheLeft,TriangularView<Lhs,Mode>::TransposeMode>::run(lhsTr,rhsTr);
+    ActualLhsType actualLhs = LhsProductTraits::extract(lhs);
+
+    // FIXME find a way to allow an inner stride if packet_traits<Scalar>::size==1
+
+    bool useRhsDirectly = Rhs::InnerStrideAtCompileTime==1 || rhs.innerStride()==1;
+
+    ei_declare_aligned_stack_constructed_variable(RhsScalar,actualRhs,rhs.size(),
+                                                  (useRhsDirectly ? rhs.data() : 0));
+                                                  
+    if(!useRhsDirectly)
+      MappedRhs(actualRhs,rhs.size()) = rhs;
+
+    triangular_solve_vector<LhsScalar, RhsScalar, typename Lhs::Index, Side, Mode, LhsProductTraits::NeedToConjugate,
+                            (int(Lhs::Flags) & RowMajorBit) ? RowMajor : ColMajor>
+      ::run(actualLhs.cols(), actualLhs.data(), actualLhs.outerStride(), actualRhs);
+
+    if(!useRhsDirectly)
+      rhs = MappedRhs(actualRhs, rhs.size());
   }
 };
 
-template <typename Scalar, typename Index, int Side, int Mode, bool Conjugate, int TriStorageOrder, int OtherStorageOrder>
-struct ei_triangular_solve_matrix;
-
 // the rhs is a matrix
-template<typename Lhs, typename Rhs, int Side, int Mode, int StorageOrder>
-struct ei_triangular_solver_selector<Lhs,Rhs,Side,Mode,NoUnrolling,StorageOrder,Dynamic>
+template<typename Lhs, typename Rhs, int Side, int Mode>
+struct triangular_solver_selector<Lhs,Rhs,Side,Mode,NoUnrolling,Dynamic>
 {
   typedef typename Rhs::Scalar Scalar;
   typedef typename Rhs::Index Index;
-  typedef ei_blas_traits<Lhs> LhsProductTraits;
+  typedef blas_traits<Lhs> LhsProductTraits;
   typedef typename LhsProductTraits::DirectLinearAccessType ActualLhsType;
+
   static void run(const Lhs& lhs, Rhs& rhs)
   {
-    const ActualLhsType actualLhs = LhsProductTraits::extract(lhs);
-    ei_triangular_solve_matrix<Scalar,Index,Side,Mode,LhsProductTraits::NeedToConjugate,StorageOrder,
+    typename internal::add_const_on_value_type<ActualLhsType>::type actualLhs = LhsProductTraits::extract(lhs);
+
+    const Index size = lhs.rows();
+    const Index othersize = Side==OnTheLeft? rhs.cols() : rhs.rows();
+
+    typedef internal::gemm_blocking_space<(Rhs::Flags&RowMajorBit) ? RowMajor : ColMajor,Scalar,Scalar,
+              Rhs::MaxRowsAtCompileTime, Rhs::MaxColsAtCompileTime, Lhs::MaxRowsAtCompileTime,4> BlockingType;
+
+    BlockingType blocking(rhs.rows(), rhs.cols(), size);
+
+    triangular_solve_matrix<Scalar,Index,Side,Mode,LhsProductTraits::NeedToConjugate,(int(Lhs::Flags) & RowMajorBit) ? RowMajor : ColMajor,
                                (Rhs::Flags&RowMajorBit) ? RowMajor : ColMajor>
-      ::run(lhs.rows(), Side==OnTheLeft? rhs.cols() : rhs.rows(), &actualLhs.coeff(0,0), actualLhs.outerStride(), &rhs.coeffRef(0,0), rhs.outerStride());
+      ::run(size, othersize, &actualLhs.coeffRef(0,0), actualLhs.outerStride(), &rhs.coeffRef(0,0), rhs.outerStride(), blocking);
   }
 };
 
@@ -196,45 +110,59 @@ struct ei_triangular_solver_selector<Lhs,Rhs,Side,Mode,NoUnrolling,StorageOrder,
 
 template<typename Lhs, typename Rhs, int Mode, int Index, int Size,
          bool Stop = Index==Size>
-struct ei_triangular_solver_unroller;
+struct triangular_solver_unroller;
 
 template<typename Lhs, typename Rhs, int Mode, int Index, int Size>
-struct ei_triangular_solver_unroller<Lhs,Rhs,Mode,Index,Size,false> {
+struct triangular_solver_unroller<Lhs,Rhs,Mode,Index,Size,false> {
   enum {
     IsLower = ((Mode&Lower)==Lower),
-    I = IsLower ? Index : Size - Index - 1,
-    S = IsLower ? 0     : I+1
+    RowIndex = IsLower ? Index : Size - Index - 1,
+    S = IsLower ? 0     : RowIndex+1
   };
   static void run(const Lhs& lhs, Rhs& rhs)
   {
     if (Index>0)
-      rhs.coeffRef(I) -= lhs.row(I).template segment<Index>(S).transpose().cwiseProduct(rhs.template segment<Index>(S)).sum();
+      rhs.coeffRef(RowIndex) -= lhs.row(RowIndex).template segment<Index>(S).transpose()
+                         .cwiseProduct(rhs.template segment<Index>(S)).sum();
 
     if(!(Mode & UnitDiag))
-      rhs.coeffRef(I) /= lhs.coeff(I,I);
+      rhs.coeffRef(RowIndex) /= lhs.coeff(RowIndex,RowIndex);
 
-    ei_triangular_solver_unroller<Lhs,Rhs,Mode,Index+1,Size>::run(lhs,rhs);
+    triangular_solver_unroller<Lhs,Rhs,Mode,Index+1,Size>::run(lhs,rhs);
   }
 };
 
 template<typename Lhs, typename Rhs, int Mode, int Index, int Size>
-struct ei_triangular_solver_unroller<Lhs,Rhs,Mode,Index,Size,true> {
+struct triangular_solver_unroller<Lhs,Rhs,Mode,Index,Size,true> {
   static void run(const Lhs&, Rhs&) {}
 };
 
-template<typename Lhs, typename Rhs, int Mode, int StorageOrder>
-struct ei_triangular_solver_selector<Lhs,Rhs,OnTheLeft,Mode,CompleteUnrolling,StorageOrder,1> {
+template<typename Lhs, typename Rhs, int Mode>
+struct triangular_solver_selector<Lhs,Rhs,OnTheLeft,Mode,CompleteUnrolling,1> {
   static void run(const Lhs& lhs, Rhs& rhs)
-  { ei_triangular_solver_unroller<Lhs,Rhs,Mode,0,Rhs::SizeAtCompileTime>::run(lhs,rhs); }
+  { triangular_solver_unroller<Lhs,Rhs,Mode,0,Rhs::SizeAtCompileTime>::run(lhs,rhs); }
 };
+
+template<typename Lhs, typename Rhs, int Mode>
+struct triangular_solver_selector<Lhs,Rhs,OnTheRight,Mode,CompleteUnrolling,1> {
+  static void run(const Lhs& lhs, Rhs& rhs)
+  {
+    Transpose<const Lhs> trLhs(lhs);
+    Transpose<Rhs> trRhs(rhs);
+    
+    triangular_solver_unroller<Transpose<const Lhs>,Transpose<Rhs>,
+                              ((Mode&Upper)==Upper ? Lower : Upper) | (Mode&UnitDiag),
+                              0,Rhs::SizeAtCompileTime>::run(trLhs,trRhs);
+  }
+};
+
+} // end namespace internal
 
 /***************************************************************************
 * TriangularView methods
 ***************************************************************************/
 
 /** "in-place" version of TriangularView::solve() where the result is written in \a other
-  *
-  *
   *
   * \warning The parameter is only marked 'const' to make the C++ compiler accept a temporary expression here.
   * This function will const_cast it, so constness isn't honored here.
@@ -246,17 +174,15 @@ template<int Side, typename OtherDerived>
 void TriangularView<MatrixType,Mode>::solveInPlace(const MatrixBase<OtherDerived>& _other) const
 {
   OtherDerived& other = _other.const_cast_derived();
-  ei_assert(cols() == rows());
-  ei_assert( (Side==OnTheLeft && cols() == other.rows()) || (Side==OnTheRight && cols() == other.cols()) );
-  ei_assert(!(Mode & ZeroDiag));
-  ei_assert(Mode & (Upper|Lower));
+  eigen_assert( cols() == rows() && ((Side==OnTheLeft && cols() == other.rows()) || (Side==OnTheRight && cols() == other.cols())) );
+  eigen_assert((!(Mode & ZeroDiag)) && bool(Mode & (Upper|Lower)));
 
-  enum { copy = ei_traits<OtherDerived>::Flags & RowMajorBit  && OtherDerived::IsVectorAtCompileTime };
-  typedef typename ei_meta_if<copy,
-    typename ei_plain_matrix_type_column_major<OtherDerived>::type, OtherDerived&>::ret OtherCopy;
+  enum { copy = internal::traits<OtherDerived>::Flags & RowMajorBit  && OtherDerived::IsVectorAtCompileTime };
+  typedef typename internal::conditional<copy,
+    typename internal::plain_matrix_type_column_major<OtherDerived>::type, OtherDerived&>::type OtherCopy;
   OtherCopy otherCopy(other);
 
-  ei_triangular_solver_selector<MatrixType, typename ei_unref<OtherCopy>::type,
+  internal::triangular_solver_selector<MatrixType, typename internal::remove_reference<OtherCopy>::type,
     Side, Mode>::run(nestedExpression(), otherCopy);
 
   if (copy)
@@ -265,43 +191,71 @@ void TriangularView<MatrixType,Mode>::solveInPlace(const MatrixBase<OtherDerived
 
 /** \returns the product of the inverse of \c *this with \a other, \a *this being triangular.
   *
+  * This function computes the inverse-matrix matrix product inverse(\c *this) * \a other if
+  * \a Side==OnTheLeft (the default), or the right-inverse-multiply  \a other * inverse(\c *this) if
+  * \a Side==OnTheRight.
   *
-  *
-  * This function computes the inverse-matrix matrix product inverse(\c *this) * \a other.
   * The matrix \c *this must be triangular and invertible (i.e., all the coefficients of the
   * diagonal must be non zero). It works as a forward (resp. backward) substitution if \c *this
   * is an upper (resp. lower) triangular matrix.
   *
-  * It is required that \c *this be marked as either an upper or a lower triangular matrix, which
-  * can be done by marked(), and that is automatically the case with expressions such as those returned
-  * by extract().
-  *
   * Example: \include MatrixBase_marked.cpp
   * Output: \verbinclude MatrixBase_marked.out
   *
-  * This function is essentially a wrapper to the faster solveTriangularInPlace() function creating
-  * a temporary copy of \a other, calling solveTriangularInPlace() on the copy and returning it.
-  * Therefore, if \a other is not needed anymore, it is quite faster to call solveTriangularInPlace()
-  * instead of solveTriangular().
+  * This function returns an expression of the inverse-multiply and can works in-place if it is assigned
+  * to the same matrix or vector \a other.
   *
-  * For users coming from BLAS, this function (and more specifically solveTriangularInPlace()) offer
+  * For users coming from BLAS, this function (and more specifically solveInPlace()) offer
   * all the operations supported by the \c *TRSV and \c *TRSM BLAS routines.
-  *
-  * \b Tips: to perform a \em "right-inverse-multiply" you can simply transpose the operation, e.g.:
-  * \code
-  * M * T^1  <=>  T.transpose().solveInPlace(M.transpose());
-  * \endcode
   *
   * \sa TriangularView::solveInPlace()
   */
 template<typename Derived, unsigned int Mode>
-template<int Side, typename RhsDerived>
-typename ei_plain_matrix_type_column_major<RhsDerived>::type
-TriangularView<Derived,Mode>::solve(const MatrixBase<RhsDerived>& rhs) const
+template<int Side, typename Other>
+const internal::triangular_solve_retval<Side,TriangularView<Derived,Mode>,Other>
+TriangularView<Derived,Mode>::solve(const MatrixBase<Other>& other) const
 {
-  typename ei_plain_matrix_type_column_major<RhsDerived>::type res(rhs);
-  solveInPlace<Side>(res);
-  return res;
+  return internal::triangular_solve_retval<Side,TriangularView,Other>(*this, other.derived());
 }
+
+namespace internal {
+
+
+template<int Side, typename TriangularType, typename Rhs>
+struct traits<triangular_solve_retval<Side, TriangularType, Rhs> >
+{
+  typedef typename internal::plain_matrix_type_column_major<Rhs>::type ReturnType;
+};
+
+template<int Side, typename TriangularType, typename Rhs> struct triangular_solve_retval
+ : public ReturnByValue<triangular_solve_retval<Side, TriangularType, Rhs> >
+{
+  typedef typename remove_all<typename Rhs::Nested>::type RhsNestedCleaned;
+  typedef ReturnByValue<triangular_solve_retval> Base;
+  typedef typename Base::Index Index;
+
+  triangular_solve_retval(const TriangularType& tri, const Rhs& rhs)
+    : m_triangularMatrix(tri), m_rhs(rhs)
+  {}
+
+  inline Index rows() const { return m_rhs.rows(); }
+  inline Index cols() const { return m_rhs.cols(); }
+
+  template<typename Dest> inline void evalTo(Dest& dst) const
+  {
+    const typename Dest::Scalar *dst_data = internal::extract_data(dst);
+    if(!(is_same<RhsNestedCleaned,Dest>::value && dst_data!=0 && extract_data(dst) == extract_data(m_rhs)))
+      dst = m_rhs;
+    m_triangularMatrix.template solveInPlace<Side>(dst);
+  }
+
+  protected:
+    const TriangularType& m_triangularMatrix;
+    typename Rhs::Nested m_rhs;
+};
+
+} // namespace internal
+
+} // end namespace Eigen
 
 #endif // EIGEN_SOLVETRIANGULAR_H

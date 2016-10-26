@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2008 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_ARRAY_CWISE_OPERATORS_H
 #define EIGEN_ARRAY_CWISE_OPERATORS_H
+
+namespace Eigen { 
 
 /***************************************************************************
 * The following functions were defined in Core
@@ -32,7 +19,7 @@
 
 /** \deprecated ArrayBase::abs() */
 template<typename ExpressionType>
-EIGEN_STRONG_INLINE const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_abs_op)
+EIGEN_STRONG_INLINE const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_abs_op)
 Cwise<ExpressionType>::abs() const
 {
   return _expression();
@@ -40,7 +27,7 @@ Cwise<ExpressionType>::abs() const
 
 /** \deprecated ArrayBase::abs2() */
 template<typename ExpressionType>
-EIGEN_STRONG_INLINE const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_abs2_op)
+EIGEN_STRONG_INLINE const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_abs2_op)
 Cwise<ExpressionType>::abs2() const
 {
   return _expression();
@@ -48,7 +35,7 @@ Cwise<ExpressionType>::abs2() const
 
 /** \deprecated ArrayBase::exp() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_exp_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_exp_op)
 Cwise<ExpressionType>::exp() const
 {
   return _expression();
@@ -56,7 +43,7 @@ Cwise<ExpressionType>::exp() const
 
 /** \deprecated ArrayBase::log() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_log_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_log_op)
 Cwise<ExpressionType>::log() const
 {
   return _expression();
@@ -74,10 +61,10 @@ Cwise<ExpressionType>::operator*(const MatrixBase<OtherDerived> &other) const
 /** \deprecated ArrayBase::operator/() */
 template<typename ExpressionType>
 template<typename OtherDerived>
-EIGEN_STRONG_INLINE const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_quotient_op)
+EIGEN_STRONG_INLINE const EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_quotient_op)
 Cwise<ExpressionType>::operator/(const MatrixBase<OtherDerived> &other) const
 {
-  return EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_quotient_op)(_expression(), other.derived());
+  return EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_quotient_op)(_expression(), other.derived());
 }
 
 /** \deprecated ArrayBase::operator*=() */
@@ -96,24 +83,6 @@ inline ExpressionType& Cwise<ExpressionType>::operator/=(const MatrixBase<OtherD
   return m_matrix.const_cast_derived() = *this / other;
 }
 
-/** \deprecated ArrayBase::min() */
-template<typename ExpressionType>
-template<typename OtherDerived>
-EIGEN_STRONG_INLINE const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_min_op)
-Cwise<ExpressionType>::min(const MatrixBase<OtherDerived> &other) const
-{
-  return EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_min_op)(_expression(), other.derived());
-}
-
-/** \deprecated ArrayBase::max() */
-template<typename ExpressionType>
-template<typename OtherDerived>
-EIGEN_STRONG_INLINE const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_max_op)
-Cwise<ExpressionType>::max(const MatrixBase<OtherDerived> &other) const
-{
-  return EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_max_op)(_expression(), other.derived());
-}
-
 /***************************************************************************
 * The following functions were defined in Array
 ***************************************************************************/
@@ -122,7 +91,7 @@ Cwise<ExpressionType>::max(const MatrixBase<OtherDerived> &other) const
 
 /** \deprecated ArrayBase::sqrt() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_sqrt_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_sqrt_op)
 Cwise<ExpressionType>::sqrt() const
 {
   return _expression();
@@ -130,7 +99,7 @@ Cwise<ExpressionType>::sqrt() const
 
 /** \deprecated ArrayBase::cos() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_cos_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_cos_op)
 Cwise<ExpressionType>::cos() const
 {
   return _expression();
@@ -139,7 +108,7 @@ Cwise<ExpressionType>::cos() const
 
 /** \deprecated ArrayBase::sin() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_sin_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_sin_op)
 Cwise<ExpressionType>::sin() const
 {
   return _expression();
@@ -148,16 +117,16 @@ Cwise<ExpressionType>::sin() const
 
 /** \deprecated ArrayBase::log() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_pow_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_pow_op)
 Cwise<ExpressionType>::pow(const Scalar& exponent) const
 {
-  return EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_pow_op)(_expression(), ei_scalar_pow_op<Scalar>(exponent));
+  return EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_pow_op)(_expression(), internal::scalar_pow_op<Scalar>(exponent));
 }
 
 
 /** \deprecated ArrayBase::inverse() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_inverse_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_inverse_op)
 Cwise<ExpressionType>::inverse() const
 {
   return _expression();
@@ -165,7 +134,7 @@ Cwise<ExpressionType>::inverse() const
 
 /** \deprecated ArrayBase::square() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_square_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_square_op)
 Cwise<ExpressionType>::square() const
 {
   return _expression();
@@ -173,7 +142,7 @@ Cwise<ExpressionType>::square() const
 
 /** \deprecated ArrayBase::cube() */
 template<typename ExpressionType>
-inline const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_cube_op)
+inline const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_cube_op)
 Cwise<ExpressionType>::cube() const
 {
   return _expression();
@@ -299,7 +268,7 @@ template<typename ExpressionType>
 inline const typename Cwise<ExpressionType>::ScalarAddReturnType
 Cwise<ExpressionType>::operator+(const Scalar& scalar) const
 {
-  return typename Cwise<ExpressionType>::ScalarAddReturnType(m_matrix, ei_scalar_add_op<Scalar>(scalar));
+  return typename Cwise<ExpressionType>::ScalarAddReturnType(m_matrix, internal::scalar_add_op<Scalar>(scalar));
 }
 
 /** \deprecated ArrayBase::operator+=(Scalar) */
@@ -323,5 +292,7 @@ inline ExpressionType& Cwise<ExpressionType>::operator-=(const Scalar& scalar)
 {
   return m_matrix.const_cast_derived() = *this - scalar;
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_ARRAY_CWISE_OPERATORS_H

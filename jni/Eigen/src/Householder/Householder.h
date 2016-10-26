@@ -4,39 +4,44 @@
 // Copyright (C) 2010 Benoit Jacob <jacob.benoit.1@gmail.com>
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_HOUSEHOLDER_H
 #define EIGEN_HOUSEHOLDER_H
 
-template<int n> struct ei_decrement_size
+namespace Eigen { 
+
+namespace internal {
+template<int n> struct decrement_size
 {
   enum {
     ret = n==Dynamic ? n : n-1
   };
 };
+}
 
+/** Computes the elementary reflector H such that:
+  * \f$ H *this = [ beta 0 ... 0]^T \f$
+  * where the transformation H is:
+  * \f$ H = I - tau v v^*\f$
+  * and the vector v is:
+  * \f$ v^T = [1 essential^T] \f$
+  *
+  * The essential part of the vector \c v is stored in *this.
+  * 
+  * On output:
+  * \param tau the scaling factor of the Householder transformation
+  * \param beta the result of H * \c *this
+  *
+  * \sa MatrixBase::makeHouseholder(), MatrixBase::applyHouseholderOnTheLeft(),
+  *     MatrixBase::applyHouseholderOnTheRight()
+  */
 template<typename Derived>
 void MatrixBase<Derived>::makeHouseholderInPlace(Scalar& tau, RealScalar& beta)
 {
-  VectorBlock<Derived, ei_decrement_size<Base::SizeAtCompileTime>::ret> essentialPart(derived(), 1, size()-1);
+  VectorBlock<Derived, internal::decrement_size<Base::SizeAtCompileTime>::ret> essentialPart(derived(), 1, size()-1);
   makeHouseholder(essentialPart, tau, beta);
 }
 
@@ -49,7 +54,7 @@ void MatrixBase<Derived>::makeHouseholderInPlace(Scalar& tau, RealScalar& beta)
   *
   * On output:
   * \param essential the essential part of the vector \c v
-  * \param tau the scaling factor of the householder transformation
+  * \param tau the scaling factor of the Householder transformation
   * \param beta the result of H * \c *this
   *
   * \sa MatrixBase::makeHouseholderInPlace(), MatrixBase::applyHouseholderOnTheLeft(),
@@ -62,27 +67,47 @@ void MatrixBase<Derived>::makeHouseholder(
   Scalar& tau,
   RealScalar& beta) const
 {
+  using std::sqrt;
+  using numext::conj;
+  
   EIGEN_STATIC_ASSERT_VECTOR_ONLY(EssentialPart)
-  VectorBlock<Derived, EssentialPart::SizeAtCompileTime> tail(derived(), 1, size()-1);
+  VectorBlock<const Derived, EssentialPart::SizeAtCompileTime> tail(derived(), 1, size()-1);
   
   RealScalar tailSqNorm = size()==1 ? RealScalar(0) : tail.squaredNorm();
   Scalar c0 = coeff(0);
+  const RealScalar tol = (std::numeric_limits<RealScalar>::min)();
 
-  if(tailSqNorm == RealScalar(0) && ei_imag(c0)==RealScalar(0))
+  if(tailSqNorm <= tol && numext::abs2(numext::imag(c0))<=tol)
   {
-    tau = 0;
-    beta = ei_real(c0);
+    tau = RealScalar(0);
+    beta = numext::real(c0);
+    essential.setZero();
   }
   else
   {
-    beta = ei_sqrt(ei_abs2(c0) + tailSqNorm);
-    if (ei_real(c0)>=RealScalar(0))
+    beta = sqrt(numext::abs2(c0) + tailSqNorm);
+    if (numext::real(c0)>=RealScalar(0))
       beta = -beta;
     essential = tail / (c0 - beta);
-    tau = ei_conj((beta - c0) / beta);
+    tau = conj((beta - c0) / beta);
   }
 }
 
+/** Apply the elementary reflector H given by
+  * \f$ H = I - tau v v^*\f$
+  * with
+  * \f$ v^T = [1 essential^T] \f$
+  * from the left to a vector or matrix.
+  *
+  * On input:
+  * \param essential the essential part of the vector \c v
+  * \param tau the scaling factor of the Householder transformation
+  * \param workspace a pointer to working space with at least
+  *                  this->cols() * essential.size() entries
+  *
+  * \sa MatrixBase::makeHouseholder(), MatrixBase::makeHouseholderInPlace(), 
+  *     MatrixBase::applyHouseholderOnTheRight()
+  */
 template<typename Derived>
 template<typename EssentialPart>
 void MatrixBase<Derived>::applyHouseholderOnTheLeft(
@@ -96,7 +121,7 @@ void MatrixBase<Derived>::applyHouseholderOnTheLeft(
   }
   else
   {
-    Map<typename ei_plain_row_type<PlainObject>::type> tmp(workspace,cols());
+    Map<typename internal::plain_row_type<PlainObject>::type> tmp(workspace,cols());
     Block<Derived, EssentialPart::SizeAtCompileTime, Derived::ColsAtCompileTime> bottom(derived(), 1, 0, rows()-1, cols());
     tmp.noalias() = essential.adjoint() * bottom;
     tmp += this->row(0);
@@ -105,6 +130,21 @@ void MatrixBase<Derived>::applyHouseholderOnTheLeft(
   }
 }
 
+/** Apply the elementary reflector H given by
+  * \f$ H = I - tau v v^*\f$
+  * with
+  * \f$ v^T = [1 essential^T] \f$
+  * from the right to a vector or matrix.
+  *
+  * On input:
+  * \param essential the essential part of the vector \c v
+  * \param tau the scaling factor of the Householder transformation
+  * \param workspace a pointer to working space with at least
+  *                  this->cols() * essential.size() entries
+  *
+  * \sa MatrixBase::makeHouseholder(), MatrixBase::makeHouseholderInPlace(), 
+  *     MatrixBase::applyHouseholderOnTheLeft()
+  */
 template<typename Derived>
 template<typename EssentialPart>
 void MatrixBase<Derived>::applyHouseholderOnTheRight(
@@ -118,7 +158,7 @@ void MatrixBase<Derived>::applyHouseholderOnTheRight(
   }
   else
   {
-    Map<typename ei_plain_col_type<PlainObject>::type> tmp(workspace,rows());
+    Map<typename internal::plain_col_type<PlainObject>::type> tmp(workspace,rows());
     Block<Derived, Derived::RowsAtCompileTime, EssentialPart::SizeAtCompileTime> right(derived(), 0, 1, rows(), cols()-1);
     tmp.noalias() = right * essential.conjugate();
     tmp += this->col(0);
@@ -126,5 +166,7 @@ void MatrixBase<Derived>::applyHouseholderOnTheRight(
     right.noalias() -= tau * tmp * essential.transpose();
   }
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_HOUSEHOLDER_H

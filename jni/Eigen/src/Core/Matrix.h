@@ -4,27 +4,14 @@
 // Copyright (C) 2006-2010 Benoit Jacob <jacob.benoit.1@gmail.com>
 // Copyright (C) 2008-2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_MATRIX_H
 #define EIGEN_MATRIX_H
+
+namespace Eigen {
 
 /** \class Matrix
   * \ingroup Core_Module
@@ -43,9 +30,9 @@
   * \tparam _Cols Number of columns, or \b Dynamic
   *
   * The remaining template parameters are optional -- in most cases you don't have to worry about them.
-  * \tparam _Options \anchor matrix_tparam_options A combination of either \b RowMajor or \b ColMajor, and of either
-  *                 \b AutoAlign or \b DontAlign.
-  *                 The former controls storage order, and defaults to column-major. The latter controls alignment, which is required
+  * \tparam _Options \anchor matrix_tparam_options A combination of either \b #RowMajor or \b #ColMajor, and of either
+  *                 \b #AutoAlign or \b #DontAlign.
+  *                 The former controls \ref TopicStorageOrders "storage order", and defaults to column-major. The latter controls alignment, which is required
   *                 for vectorization. It defaults to aligning matrices except for fixed sizes that aren't a multiple of the packet size.
   * \tparam _MaxRows Maximum number of rows. Defaults to \a _Rows (\ref maxrows "note").
   * \tparam _MaxCols Maximum number of columns. Defaults to \a _Cols (\ref maxrows "note").
@@ -79,6 +66,9 @@
   * m(0, 3) = 3;
   * \endcode
   *
+  * This class can be extended with the help of the plugin mechanism described on the page
+  * \ref TopicCustomizingEigen by defining the preprocessor symbol \c EIGEN_MATRIX_PLUGIN.
+  *
   * <i><b>Some notes:</b></i>
   *
   * <dl>
@@ -107,10 +97,13 @@
   * are the dimensions of the original matrix, while _Rows and _Cols are Dynamic.</dd>
   * </dl>
   *
-  * \see MatrixBase for the majority of the API methods for matrices, \ref TopicClassHierarchy
+  * \see MatrixBase for the majority of the API methods for matrices, \ref TopicClassHierarchy, 
+  * \ref TopicStorageOrders 
   */
+
+namespace internal {
 template<typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
-struct ei_traits<Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> >
+struct traits<Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> >
 {
   typedef _Scalar Scalar;
   typedef Dense StorageKind;
@@ -121,34 +114,31 @@ struct ei_traits<Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> >
     ColsAtCompileTime = _Cols,
     MaxRowsAtCompileTime = _MaxRows,
     MaxColsAtCompileTime = _MaxCols,
-    Flags = ei_compute_matrix_flags<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols>::ret,
+    Flags = compute_matrix_flags<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols>::ret,
     CoeffReadCost = NumTraits<Scalar>::ReadCost,
     Options = _Options,
     InnerStrideAtCompileTime = 1,
     OuterStrideAtCompileTime = (Options&RowMajor) ? ColsAtCompileTime : RowsAtCompileTime
   };
 };
+}
 
 template<typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
 class Matrix
-  : public DenseStorageBase<Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> >
+  : public PlainObjectBase<Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> >
 {
   public:
 
     /** \brief Base class typedef.
-      * \sa DenseStorageBase
+      * \sa PlainObjectBase
       */
-    typedef DenseStorageBase<Matrix> Base;
+    typedef PlainObjectBase<Matrix> Base;
 
     enum { Options = _Options };
 
     EIGEN_DENSE_PUBLIC_INTERFACE(Matrix)
 
     typedef typename Base::PlainObject PlainObject;
-
-    enum { NeedsToAlign = (!(Options&DontAlign))
-                          && SizeAtCompileTime!=Dynamic && ((static_cast<int>(sizeof(Scalar))*SizeAtCompileTime)%16)==0 };
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
 
     using Base::base;
     using Base::coeffRef;
@@ -210,16 +200,31 @@ class Matrix
       *
       * \sa resize(Index,Index)
       */
-    EIGEN_STRONG_INLINE explicit Matrix() : Base()
+    EIGEN_STRONG_INLINE Matrix() : Base()
     {
       Base::_check_template_params();
-      EIGEN_INITIALIZE_BY_ZERO_IF_THAT_OPTION_IS_ENABLED
+      EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
     }
 
     // FIXME is it still needed
-    Matrix(ei_constructor_without_unaligned_array_assert)
-      : Base(ei_constructor_without_unaligned_array_assert())
-    { Base::_check_template_params(); EIGEN_INITIALIZE_BY_ZERO_IF_THAT_OPTION_IS_ENABLED }
+    Matrix(internal::constructor_without_unaligned_array_assert)
+      : Base(internal::constructor_without_unaligned_array_assert())
+    { Base::_check_template_params(); EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED }
+
+#ifdef EIGEN_HAVE_RVALUE_REFERENCES
+    Matrix(Matrix&& other)
+      : Base(std::move(other))
+    {
+      Base::_check_template_params();
+      if (RowsAtCompileTime!=Dynamic && ColsAtCompileTime!=Dynamic)
+        Base::_set_noalias(other);
+    }
+    Matrix& operator=(Matrix&& other)
+    {
+      other.swap(*this);
+      return *this;
+    }
+#endif
 
     /** \brief Constructs a vector or row-vector with given dimension. \only_for_vectors
       *
@@ -232,9 +237,9 @@ class Matrix
     {
       Base::_check_template_params();
       EIGEN_STATIC_ASSERT_VECTOR_ONLY(Matrix)
-      ei_assert(dim > 0);
-      ei_assert(SizeAtCompileTime == Dynamic || SizeAtCompileTime == dim);
-      EIGEN_INITIALIZE_BY_ZERO_IF_THAT_OPTION_IS_ENABLED
+      eigen_assert(dim >= 0);
+      eigen_assert(SizeAtCompileTime == Dynamic || SizeAtCompileTime == dim);
+      EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
     }
 
     #ifndef EIGEN_PARSED_BY_DOXYGEN
@@ -282,6 +287,11 @@ class Matrix
     EIGEN_STRONG_INLINE Matrix(const MatrixBase<OtherDerived>& other)
              : Base(other.rows() * other.cols(), other.rows(), other.cols())
     {
+      // This test resides here, to bring the error messages closer to the user. Normally, these checks
+      // are performed deeply within the library, thus causing long and scary error traces.
+      EIGEN_STATIC_ASSERT((internal::is_same<Scalar, typename OtherDerived::Scalar>::value),
+        YOU_MIXED_DIFFERENT_NUMERIC_TYPES__YOU_NEED_TO_USE_THE_CAST_METHOD_OF_MATRIXBASE_TO_CAST_NUMERIC_TYPES_EXPLICITLY)
+
       Base::_check_template_params();
       Base::_set_noalias(other);
     }
@@ -309,7 +319,7 @@ class Matrix
       : Base(other.derived().rows() * other.derived().cols(), other.derived().rows(), other.derived().cols())
     {
       Base::_check_template_params();
-      Base::resize(other.rows(), other.cols());
+      Base::_resize_to_match(other);
       // FIXME/CHECK: isn't *this = other.derived() more efficient. it allows to
       //              go for pure _set() implementations, right?
       *this = other;
@@ -320,7 +330,7 @@ class Matrix
       * of same type it is enough to swap the data pointers.
       */
     template<typename OtherDerived>
-    void swap(MatrixBase<OtherDerived> EIGEN_REF_TO_TEMPORARY other)
+    void swap(MatrixBase<OtherDerived> const & other)
     { this->_swap(other.derived()); }
 
     inline Index innerStride() const { return 1; }
@@ -333,6 +343,13 @@ class Matrix
     template<typename OtherDerived>
     Matrix& operator=(const RotationBase<OtherDerived,ColsAtCompileTime>& r);
 
+    #ifdef EIGEN2_SUPPORT
+    template<typename OtherDerived>
+    explicit Matrix(const eigen2_RotationBase<OtherDerived,ColsAtCompileTime>& r);
+    template<typename OtherDerived>
+    Matrix& operator=(const eigen2_RotationBase<OtherDerived,ColsAtCompileTime>& r);
+    #endif
+
     // allow to extend Matrix outside Eigen
     #ifdef EIGEN_MATRIX_PLUGIN
     #include EIGEN_MATRIX_PLUGIN
@@ -340,7 +357,7 @@ class Matrix
 
   protected:
     template <typename Derived, typename OtherDerived, bool IsVector>
-    friend struct ei_conservative_resize_like_impl;
+    friend struct internal::conservative_resize_like_impl;
 
     using Base::m_storage;
 };
@@ -396,25 +413,8 @@ EIGEN_MAKE_TYPEDEFS_ALL_SIZES(std::complex<double>, cd)
 
 #undef EIGEN_MAKE_TYPEDEFS_ALL_SIZES
 #undef EIGEN_MAKE_TYPEDEFS
+#undef EIGEN_MAKE_FIXED_TYPEDEFS
 
-#undef EIGEN_MAKE_TYPEDEFS_LARGE
-
-#define EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE_AND_SIZE(TypeSuffix, SizeSuffix) \
-using Eigen::Matrix##SizeSuffix##TypeSuffix; \
-using Eigen::Vector##SizeSuffix##TypeSuffix; \
-using Eigen::RowVector##SizeSuffix##TypeSuffix;
-
-#define EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(TypeSuffix) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE_AND_SIZE(TypeSuffix, 2) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE_AND_SIZE(TypeSuffix, 3) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE_AND_SIZE(TypeSuffix, 4) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE_AND_SIZE(TypeSuffix, X) \
-
-#define EIGEN_USING_MATRIX_TYPEDEFS \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(i) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(f) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(d) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(cf) \
-EIGEN_USING_MATRIX_TYPEDEFS_FOR_TYPE(cd)
+} // end namespace Eigen
 
 #endif // EIGEN_MATRIX_H

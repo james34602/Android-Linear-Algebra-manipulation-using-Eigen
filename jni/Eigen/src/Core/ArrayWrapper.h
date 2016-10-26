@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2009-2010 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_ARRAYWRAPPER_H
 #define EIGEN_ARRAYWRAPPER_H
+
+namespace Eigen { 
 
 /** \class ArrayWrapper
   * \ingroup Core_Module
@@ -35,12 +22,20 @@
   *
   * \sa MatrixBase::array(), class MatrixWrapper
   */
+
+namespace internal {
 template<typename ExpressionType>
-struct ei_traits<ArrayWrapper<ExpressionType> >
-  : public ei_traits<typename ei_cleantype<typename ExpressionType::Nested>::type >
+struct traits<ArrayWrapper<ExpressionType> >
+  : public traits<typename remove_all<typename ExpressionType::Nested>::type >
 {
   typedef ArrayXpr XprKind;
+  // Let's remove NestByRefBit
+  enum {
+    Flags0 = traits<typename remove_all<typename ExpressionType::Nested>::type >::Flags,
+    Flags = Flags0 & ~NestByRefBit
+  };
 };
+}
 
 template<typename ExpressionType>
 class ArrayWrapper : public ArrayBase<ArrayWrapper<ExpressionType> >
@@ -50,26 +45,40 @@ class ArrayWrapper : public ArrayBase<ArrayWrapper<ExpressionType> >
     EIGEN_DENSE_PUBLIC_INTERFACE(ArrayWrapper)
     EIGEN_INHERIT_ASSIGNMENT_OPERATORS(ArrayWrapper)
 
-    typedef typename ei_nested<ExpressionType>::type NestedExpressionType;
+    typedef typename internal::conditional<
+                       internal::is_lvalue<ExpressionType>::value,
+                       Scalar,
+                       const Scalar
+                     >::type ScalarWithConstIfNotLvalue;
 
-    inline ArrayWrapper(const ExpressionType& matrix) : m_expression(matrix) {}
+    typedef typename internal::nested<ExpressionType>::type NestedExpressionType;
+
+    inline ArrayWrapper(ExpressionType& matrix) : m_expression(matrix) {}
 
     inline Index rows() const { return m_expression.rows(); }
     inline Index cols() const { return m_expression.cols(); }
     inline Index outerStride() const { return m_expression.outerStride(); }
     inline Index innerStride() const { return m_expression.innerStride(); }
 
-    inline const CoeffReturnType coeff(Index row, Index col) const
+    inline ScalarWithConstIfNotLvalue* data() { return m_expression.const_cast_derived().data(); }
+    inline const Scalar* data() const { return m_expression.data(); }
+
+    inline CoeffReturnType coeff(Index rowId, Index colId) const
     {
-      return m_expression.coeff(row, col);
+      return m_expression.coeff(rowId, colId);
     }
 
-    inline Scalar& coeffRef(Index row, Index col)
+    inline Scalar& coeffRef(Index rowId, Index colId)
     {
-      return m_expression.const_cast_derived().coeffRef(row, col);
+      return m_expression.const_cast_derived().coeffRef(rowId, colId);
     }
 
-    inline const CoeffReturnType coeff(Index index) const
+    inline const Scalar& coeffRef(Index rowId, Index colId) const
+    {
+      return m_expression.const_cast_derived().coeffRef(rowId, colId);
+    }
+
+    inline CoeffReturnType coeff(Index index) const
     {
       return m_expression.coeff(index);
     }
@@ -79,16 +88,21 @@ class ArrayWrapper : public ArrayBase<ArrayWrapper<ExpressionType> >
       return m_expression.const_cast_derived().coeffRef(index);
     }
 
-    template<int LoadMode>
-    inline const PacketScalar packet(Index row, Index col) const
+    inline const Scalar& coeffRef(Index index) const
     {
-      return m_expression.template packet<LoadMode>(row, col);
+      return m_expression.const_cast_derived().coeffRef(index);
     }
 
     template<int LoadMode>
-    inline void writePacket(Index row, Index col, const PacketScalar& x)
+    inline const PacketScalar packet(Index rowId, Index colId) const
     {
-      m_expression.const_cast_derived().template writePacket<LoadMode>(row, col, x);
+      return m_expression.template packet<LoadMode>(rowId, colId);
+    }
+
+    template<int LoadMode>
+    inline void writePacket(Index rowId, Index colId, const PacketScalar& val)
+    {
+      m_expression.const_cast_derived().template writePacket<LoadMode>(rowId, colId, val);
     }
 
     template<int LoadMode>
@@ -98,16 +112,29 @@ class ArrayWrapper : public ArrayBase<ArrayWrapper<ExpressionType> >
     }
 
     template<int LoadMode>
-    inline void writePacket(Index index, const PacketScalar& x)
+    inline void writePacket(Index index, const PacketScalar& val)
     {
-      m_expression.const_cast_derived().template writePacket<LoadMode>(index, x);
+      m_expression.const_cast_derived().template writePacket<LoadMode>(index, val);
     }
 
     template<typename Dest>
     inline void evalTo(Dest& dst) const { dst = m_expression; }
 
+    const typename internal::remove_all<NestedExpressionType>::type& 
+    nestedExpression() const 
+    {
+      return m_expression;
+    }
+
+    /** Forwards the resizing request to the nested expression
+      * \sa DenseBase::resize(Index)  */
+    void resize(Index newSize) { m_expression.const_cast_derived().resize(newSize); }
+    /** Forwards the resizing request to the nested expression
+      * \sa DenseBase::resize(Index,Index)*/
+    void resize(Index nbRows, Index nbCols) { m_expression.const_cast_derived().resize(nbRows,nbCols); }
+
   protected:
-    const NestedExpressionType m_expression;
+    NestedExpressionType m_expression;
 };
 
 /** \class MatrixWrapper
@@ -121,12 +148,19 @@ class ArrayWrapper : public ArrayBase<ArrayWrapper<ExpressionType> >
   * \sa MatrixBase::matrix(), class ArrayWrapper
   */
 
+namespace internal {
 template<typename ExpressionType>
-struct ei_traits<MatrixWrapper<ExpressionType> >
- : public ei_traits<typename ei_cleantype<typename ExpressionType::Nested>::type >
+struct traits<MatrixWrapper<ExpressionType> >
+ : public traits<typename remove_all<typename ExpressionType::Nested>::type >
 {
   typedef MatrixXpr XprKind;
+  // Let's remove NestByRefBit
+  enum {
+    Flags0 = traits<typename remove_all<typename ExpressionType::Nested>::type >::Flags,
+    Flags = Flags0 & ~NestByRefBit
+  };
 };
+}
 
 template<typename ExpressionType>
 class MatrixWrapper : public MatrixBase<MatrixWrapper<ExpressionType> >
@@ -136,26 +170,40 @@ class MatrixWrapper : public MatrixBase<MatrixWrapper<ExpressionType> >
     EIGEN_DENSE_PUBLIC_INTERFACE(MatrixWrapper)
     EIGEN_INHERIT_ASSIGNMENT_OPERATORS(MatrixWrapper)
 
-    typedef typename ei_nested<ExpressionType>::type NestedExpressionType;
+    typedef typename internal::conditional<
+                       internal::is_lvalue<ExpressionType>::value,
+                       Scalar,
+                       const Scalar
+                     >::type ScalarWithConstIfNotLvalue;
 
-    inline MatrixWrapper(const ExpressionType& matrix) : m_expression(matrix) {}
+    typedef typename internal::nested<ExpressionType>::type NestedExpressionType;
+
+    inline MatrixWrapper(ExpressionType& a_matrix) : m_expression(a_matrix) {}
 
     inline Index rows() const { return m_expression.rows(); }
     inline Index cols() const { return m_expression.cols(); }
     inline Index outerStride() const { return m_expression.outerStride(); }
     inline Index innerStride() const { return m_expression.innerStride(); }
 
-    inline const CoeffReturnType coeff(Index row, Index col) const
+    inline ScalarWithConstIfNotLvalue* data() { return m_expression.const_cast_derived().data(); }
+    inline const Scalar* data() const { return m_expression.data(); }
+
+    inline CoeffReturnType coeff(Index rowId, Index colId) const
     {
-      return m_expression.coeff(row, col);
+      return m_expression.coeff(rowId, colId);
     }
 
-    inline Scalar& coeffRef(Index row, Index col)
+    inline Scalar& coeffRef(Index rowId, Index colId)
     {
-      return m_expression.const_cast_derived().coeffRef(row, col);
+      return m_expression.const_cast_derived().coeffRef(rowId, colId);
     }
 
-    inline const CoeffReturnType coeff(Index index) const
+    inline const Scalar& coeffRef(Index rowId, Index colId) const
+    {
+      return m_expression.derived().coeffRef(rowId, colId);
+    }
+
+    inline CoeffReturnType coeff(Index index) const
     {
       return m_expression.coeff(index);
     }
@@ -165,16 +213,21 @@ class MatrixWrapper : public MatrixBase<MatrixWrapper<ExpressionType> >
       return m_expression.const_cast_derived().coeffRef(index);
     }
 
-    template<int LoadMode>
-    inline const PacketScalar packet(Index row, Index col) const
+    inline const Scalar& coeffRef(Index index) const
     {
-      return m_expression.template packet<LoadMode>(row, col);
+      return m_expression.const_cast_derived().coeffRef(index);
     }
 
     template<int LoadMode>
-    inline void writePacket(Index row, Index col, const PacketScalar& x)
+    inline const PacketScalar packet(Index rowId, Index colId) const
     {
-      m_expression.const_cast_derived().template writePacket<LoadMode>(row, col, x);
+      return m_expression.template packet<LoadMode>(rowId, colId);
+    }
+
+    template<int LoadMode>
+    inline void writePacket(Index rowId, Index colId, const PacketScalar& val)
+    {
+      m_expression.const_cast_derived().template writePacket<LoadMode>(rowId, colId, val);
     }
 
     template<int LoadMode>
@@ -184,13 +237,28 @@ class MatrixWrapper : public MatrixBase<MatrixWrapper<ExpressionType> >
     }
 
     template<int LoadMode>
-    inline void writePacket(Index index, const PacketScalar& x)
+    inline void writePacket(Index index, const PacketScalar& val)
     {
-      m_expression.const_cast_derived().template writePacket<LoadMode>(index, x);
+      m_expression.const_cast_derived().template writePacket<LoadMode>(index, val);
     }
 
+    const typename internal::remove_all<NestedExpressionType>::type& 
+    nestedExpression() const 
+    {
+      return m_expression;
+    }
+
+    /** Forwards the resizing request to the nested expression
+      * \sa DenseBase::resize(Index)  */
+    void resize(Index newSize) { m_expression.const_cast_derived().resize(newSize); }
+    /** Forwards the resizing request to the nested expression
+      * \sa DenseBase::resize(Index,Index)*/
+    void resize(Index nbRows, Index nbCols) { m_expression.const_cast_derived().resize(nbRows,nbCols); }
+
   protected:
-    const NestedExpressionType m_expression;
+    NestedExpressionType m_expression;
 };
+
+} // end namespace Eigen
 
 #endif // EIGEN_ARRAYWRAPPER_H

@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2008 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_FLAGGED_H
 #define EIGEN_FLAGGED_H
+
+namespace Eigen { 
 
 /** \class Flagged
   * \ingroup Core_Module
@@ -40,11 +27,14 @@
   *
   * \sa MatrixBase::flagged()
   */
+
+namespace internal {
 template<typename ExpressionType, unsigned int Added, unsigned int Removed>
-struct ei_traits<Flagged<ExpressionType, Added, Removed> > : ei_traits<ExpressionType>
+struct traits<Flagged<ExpressionType, Added, Removed> > : traits<ExpressionType>
 {
   enum { Flags = (ExpressionType::Flags | Added) & ~Removed };
 };
+}
 
 template<typename ExpressionType, unsigned int Added, unsigned int Removed> class Flagged
   : public MatrixBase<Flagged<ExpressionType, Added, Removed> >
@@ -52,9 +42,10 @@ template<typename ExpressionType, unsigned int Added, unsigned int Removed> clas
   public:
 
     typedef MatrixBase<Flagged> Base;
+    
     EIGEN_DENSE_PUBLIC_INTERFACE(Flagged)
-    typedef typename ei_meta_if<ei_must_nest_by_value<ExpressionType>::ret,
-        ExpressionType, const ExpressionType&>::ret ExpressionTypeNested;
+    typedef typename internal::conditional<internal::must_nest_by_value<ExpressionType>::ret,
+        ExpressionType, const ExpressionType&>::type ExpressionTypeNested;
     typedef typename ExpressionType::InnerIterator InnerIterator;
 
     inline Flagged(const ExpressionType& matrix) : m_matrix(matrix) {}
@@ -64,19 +55,29 @@ template<typename ExpressionType, unsigned int Added, unsigned int Removed> clas
     inline Index outerStride() const { return m_matrix.outerStride(); }
     inline Index innerStride() const { return m_matrix.innerStride(); }
 
-    inline const Scalar coeff(Index row, Index col) const
+    inline CoeffReturnType coeff(Index row, Index col) const
     {
       return m_matrix.coeff(row, col);
+    }
+
+    inline CoeffReturnType coeff(Index index) const
+    {
+      return m_matrix.coeff(index);
+    }
+    
+    inline const Scalar& coeffRef(Index row, Index col) const
+    {
+      return m_matrix.const_cast_derived().coeffRef(row, col);
+    }
+
+    inline const Scalar& coeffRef(Index index) const
+    {
+      return m_matrix.const_cast_derived().coeffRef(index);
     }
 
     inline Scalar& coeffRef(Index row, Index col)
     {
       return m_matrix.const_cast_derived().coeffRef(row, col);
-    }
-
-    inline const Scalar coeff(Index index) const
-    {
-      return m_matrix.coeff(index);
     }
 
     inline Scalar& coeffRef(Index index)
@@ -133,5 +134,7 @@ DenseBase<Derived>::flagged() const
 {
   return derived();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_FLAGGED_H

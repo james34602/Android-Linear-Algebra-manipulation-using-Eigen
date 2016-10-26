@@ -3,9 +3,7 @@
 
 #include "Core"
 
-#include "src/Core/util/DisableMSVCWarnings.h"
-
-namespace Eigen {
+#include "src/Core/util/DisableStupidWarnings.h"
 
 /** \defgroup Jacobi_Module Jacobi module
   * This module provides Jacobi and Givens rotations.
@@ -21,9 +19,7 @@ namespace Eigen {
 
 #include "src/Jacobi/Jacobi.h"
 
-} // namespace Eigen
-
-#include "src/Core/util/EnableMSVCWarnings.h"
+#include "src/Core/util/ReenableStupidWarnings.h"
 
 #endif // EIGEN_JACOBI_MODULE_H
 /* vim: set filetype=cpp et sw=2 ts=2 ai: */

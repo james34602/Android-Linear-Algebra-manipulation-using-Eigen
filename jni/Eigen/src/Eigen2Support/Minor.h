@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2006-2009 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_MINOR_H
 #define EIGEN_MINOR_H
+
+namespace Eigen { 
 
 /**
   * \class Minor
@@ -38,12 +25,14 @@
   *
   * \sa MatrixBase::minor()
   */
+
+namespace internal {
 template<typename MatrixType>
-struct ei_traits<Minor<MatrixType> >
- : ei_traits<MatrixType>
+struct traits<Minor<MatrixType> >
+ : traits<MatrixType>
 {
-  typedef typename ei_nested<MatrixType>::type MatrixTypeNested;
-  typedef typename ei_unref<MatrixTypeNested>::type _MatrixTypeNested;
+  typedef typename nested<MatrixType>::type MatrixTypeNested;
+  typedef typename remove_reference<MatrixTypeNested>::type _MatrixTypeNested;
   typedef typename MatrixType::StorageKind StorageKind;
   enum {
     RowsAtCompileTime = (MatrixType::RowsAtCompileTime != Dynamic) ?
@@ -54,11 +43,12 @@ struct ei_traits<Minor<MatrixType> >
                              int(MatrixType::MaxRowsAtCompileTime) - 1 : Dynamic,
     MaxColsAtCompileTime = (MatrixType::MaxColsAtCompileTime != Dynamic) ?
                              int(MatrixType::MaxColsAtCompileTime) - 1 : Dynamic,
-    Flags = _MatrixTypeNested::Flags & HereditaryBits,
+    Flags = _MatrixTypeNested::Flags & (HereditaryBits | LvalueBit),
     CoeffReadCost = _MatrixTypeNested::CoeffReadCost // minor is used typically on tiny matrices,
       // where loops are unrolled and the 'if' evaluates at compile time
   };
 };
+}
 
 template<typename MatrixType> class Minor
   : public MatrixBase<Minor<MatrixType> >
@@ -72,7 +62,7 @@ template<typename MatrixType> class Minor
                        Index row, Index col)
       : m_matrix(matrix), m_row(row), m_col(col)
     {
-      ei_assert(row >= 0 && row < matrix.rows()
+      eigen_assert(row >= 0 && row < matrix.rows()
           && col >= 0 && col < matrix.cols());
     }
 
@@ -121,5 +111,7 @@ MatrixBase<Derived>::minor(Index row, Index col) const
 {
   return Minor<Derived>(derived(), row, col);
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_MINOR_H

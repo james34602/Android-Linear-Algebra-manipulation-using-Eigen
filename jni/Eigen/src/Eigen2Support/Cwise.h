@@ -4,42 +4,29 @@
 // Copyright (C) 2008 Gael Guennebaud <gael.guennebaud@inria.fr>
 // Copyright (C) 2008 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_CWISE_H
 #define EIGEN_CWISE_H
 
+namespace Eigen { 
+
 /** \internal
   * convenient macro to defined the return type of a cwise binary operation */
 #define EIGEN_CWISE_BINOP_RETURN_TYPE(OP) \
-    CwiseBinaryOp<OP<typename ei_traits<ExpressionType>::Scalar>, ExpressionType, OtherDerived>
+    CwiseBinaryOp<OP<typename internal::traits<ExpressionType>::Scalar>, ExpressionType, OtherDerived>
 
 /** \internal
   * convenient macro to defined the return type of a cwise unary operation */
 #define EIGEN_CWISE_UNOP_RETURN_TYPE(OP) \
-    CwiseUnaryOp<OP<typename ei_traits<ExpressionType>::Scalar>, ExpressionType>
+    CwiseUnaryOp<OP<typename internal::traits<ExpressionType>::Scalar>, ExpressionType>
 
 /** \internal
   * convenient macro to defined the return type of a cwise comparison to a scalar */
 #define EIGEN_CWISE_COMP_TO_SCALAR_RETURN_TYPE(OP) \
-    CwiseBinaryOp<OP<typename ei_traits<ExpressionType>::Scalar>, ExpressionType, \
+    CwiseBinaryOp<OP<typename internal::traits<ExpressionType>::Scalar>, ExpressionType, \
         typename ExpressionType::ConstantReturnType >
 
 /** \class Cwise
@@ -55,16 +42,19 @@
   * Example: \include MatrixBase_cwise_const.cpp
   * Output: \verbinclude MatrixBase_cwise_const.out
   *
+  * This class can be extended with the help of the plugin mechanism described on the page
+  * \ref TopicCustomizingEigen by defining the preprocessor symbol \c EIGEN_CWISE_PLUGIN.
+  *
   * \sa MatrixBase::cwise() const, MatrixBase::cwise()
   */
 template<typename ExpressionType> class Cwise
 {
   public:
 
-    typedef typename ei_traits<ExpressionType>::Scalar Scalar;
-    typedef typename ei_meta_if<ei_must_nest_by_value<ExpressionType>::ret,
-        ExpressionType, const ExpressionType&>::ret ExpressionTypeNested;
-    typedef CwiseUnaryOp<ei_scalar_add_op<Scalar>, ExpressionType> ScalarAddReturnType;
+    typedef typename internal::traits<ExpressionType>::Scalar Scalar;
+    typedef typename internal::conditional<internal::must_nest_by_value<ExpressionType>::ret,
+        ExpressionType, const ExpressionType&>::type ExpressionTypeNested;
+    typedef CwiseUnaryOp<internal::scalar_add_op<Scalar>, ExpressionType> ScalarAddReturnType;
 
     inline Cwise(const ExpressionType& matrix) : m_matrix(matrix) {}
 
@@ -76,28 +66,32 @@ template<typename ExpressionType> class Cwise
     operator*(const MatrixBase<OtherDerived> &other) const;
 
     template<typename OtherDerived>
-    const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_quotient_op)
+    const EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_quotient_op)
     operator/(const MatrixBase<OtherDerived> &other) const;
 
+    /** \deprecated ArrayBase::min() */
     template<typename OtherDerived>
-    const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_min_op)
-    min(const MatrixBase<OtherDerived> &other) const;
+    const EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_min_op)
+    (min)(const MatrixBase<OtherDerived> &other) const
+    { return EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_min_op)(_expression(), other.derived()); }
 
+    /** \deprecated ArrayBase::max() */
     template<typename OtherDerived>
-    const EIGEN_CWISE_BINOP_RETURN_TYPE(ei_scalar_max_op)
-    max(const MatrixBase<OtherDerived> &other) const;
+    const EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_max_op)
+    (max)(const MatrixBase<OtherDerived> &other) const
+    { return EIGEN_CWISE_BINOP_RETURN_TYPE(internal::scalar_max_op)(_expression(), other.derived()); }
 
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_abs_op)      abs() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_abs2_op)     abs2() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_square_op)   square() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_cube_op)     cube() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_inverse_op)  inverse() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_sqrt_op)     sqrt() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_exp_op)      exp() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_log_op)      log() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_cos_op)      cos() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_sin_op)      sin() const;
-    const EIGEN_CWISE_UNOP_RETURN_TYPE(ei_scalar_pow_op)      pow(const Scalar& exponent) const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_abs_op)      abs() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_abs2_op)     abs2() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_square_op)   square() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_cube_op)     cube() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_inverse_op)  inverse() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_sqrt_op)     sqrt() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_exp_op)      exp() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_log_op)      log() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_cos_op)      cos() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_sin_op)      sin() const;
+    const EIGEN_CWISE_UNOP_RETURN_TYPE(internal::scalar_pow_op)      pow(const Scalar& exponent) const;
 
     const ScalarAddReturnType
     operator+(const Scalar& scalar) const;
@@ -192,5 +186,7 @@ inline Cwise<Derived> MatrixBase<Derived>::cwise()
 {
   return derived();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_CWISE_H

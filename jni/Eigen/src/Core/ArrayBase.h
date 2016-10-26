@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_ARRAYBASE_H
 #define EIGEN_ARRAYBASE_H
+
+namespace Eigen { 
 
 template<typename ExpressionType> class MatrixWrapper;
 
@@ -42,7 +29,10 @@ template<typename ExpressionType> class MatrixWrapper;
   *
   * This class is the base that is inherited by all array expression types.
   *
-  * \param Derived is the derived type, e.g., an array or an expression type.
+  * \tparam Derived is the derived type, e.g., an array or an expression type.
+  *
+  * This class can be extended with the help of the plugin mechanism described on the page
+  * \ref TopicCustomizingEigen by defining the preprocessor symbol \c EIGEN_ARRAYBASE_PLUGIN.
   *
   * \sa class MatrixBase, \ref TopicClassHierarchy
   */
@@ -53,19 +43,17 @@ template<typename Derived> class ArrayBase
 #ifndef EIGEN_PARSED_BY_DOXYGEN
     /** The base class for a given storage type. */
     typedef ArrayBase StorageBaseType;
-    
+
     typedef ArrayBase Eigen_BaseClassForSpecializationOfGlobalMathFuncImpl;
 
-    using ei_special_scalar_op_base<Derived,typename ei_traits<Derived>::Scalar,
-                typename NumTraits<typename ei_traits<Derived>::Scalar>::Real>::operator*;
-
-    typedef typename ei_traits<Derived>::StorageKind StorageKind;
-    typedef typename ei_traits<Derived>::Index Index;
-    typedef typename ei_traits<Derived>::Scalar Scalar;
-    typedef typename ei_packet_traits<Scalar>::type PacketScalar;
+    typedef typename internal::traits<Derived>::StorageKind StorageKind;
+    typedef typename internal::traits<Derived>::Index Index;
+    typedef typename internal::traits<Derived>::Scalar Scalar;
+    typedef typename internal::packet_traits<Scalar>::type PacketScalar;
     typedef typename NumTraits<Scalar>::Real RealScalar;
 
     typedef DenseBase<Derived> Base;
+    using Base::operator*;
     using Base::RowsAtCompileTime;
     using Base::ColsAtCompileTime;
     using Base::SizeAtCompileTime;
@@ -91,6 +79,7 @@ template<typename Derived> class ArrayBase
     using Base::operator/=;
 
     typedef typename Base::CoeffReturnType CoeffReturnType;
+
 #endif // not EIGEN_PARSED_BY_DOXYGEN
 
 #ifndef EIGEN_PARSED_BY_DOXYGEN
@@ -99,17 +88,17 @@ template<typename Derived> class ArrayBase
       * reference to a matrix, not a matrix! It is however guaranteed that the return type of eval() is either
       * PlainObject or const PlainObject&.
       */
-    typedef Array<typename ei_traits<Derived>::Scalar,
-                ei_traits<Derived>::RowsAtCompileTime,
-                ei_traits<Derived>::ColsAtCompileTime,
-                AutoAlign | (ei_traits<Derived>::Flags&RowMajorBit ? RowMajor : ColMajor),
-                ei_traits<Derived>::MaxRowsAtCompileTime,
-                ei_traits<Derived>::MaxColsAtCompileTime
+    typedef Array<typename internal::traits<Derived>::Scalar,
+                internal::traits<Derived>::RowsAtCompileTime,
+                internal::traits<Derived>::ColsAtCompileTime,
+                AutoAlign | (internal::traits<Derived>::Flags&RowMajorBit ? RowMajor : ColMajor),
+                internal::traits<Derived>::MaxRowsAtCompileTime,
+                internal::traits<Derived>::MaxColsAtCompileTime
           > PlainObject;
 
 
     /** \internal Represents a matrix with all coefficients equal to one another*/
-    typedef CwiseNullaryOp<ei_scalar_constant_op<Scalar>,Derived> ConstantReturnType;
+    typedef CwiseNullaryOp<internal::scalar_constant_op<Scalar>,Derived> ConstantReturnType;
 #endif // not EIGEN_PARSED_BY_DOXYGEN
 
 #define EIGEN_CURRENT_STORAGE_BASE_CLASS Eigen::ArrayBase
@@ -129,7 +118,7 @@ template<typename Derived> class ArrayBase
       */
     Derived& operator=(const ArrayBase& other)
     {
-      return ei_assign_selector<Derived,Derived>::run(derived(), other.derived());
+      return internal::assign_selector<Derived,Derived>::run(derived(), other.derived());
     }
 
     Derived& operator+=(const Scalar& scalar)
@@ -152,10 +141,10 @@ template<typename Derived> class ArrayBase
     ArrayBase<Derived>& array() { return *this; }
     const ArrayBase<Derived>& array() const { return *this; }
 
-    /** \returns an \link MatrixBase Matrix \endlink expression of this array
+    /** \returns an \link Eigen::MatrixBase Matrix \endlink expression of this array
       * \sa MatrixBase::array() */
     MatrixWrapper<Derived> matrix() { return derived(); }
-    const MatrixWrapper<Derived> matrix() const { return derived(); }
+    const MatrixWrapper<const Derived> matrix() const { return derived(); }
 
 //     template<typename Dest>
 //     inline void evalTo(Dest& dst) const { dst = matrix(); }
@@ -169,11 +158,11 @@ template<typename Derived> class ArrayBase
     template<typename OtherDerived> explicit ArrayBase(const ArrayBase<OtherDerived>&);
   protected:
     // mixing arrays and matrices is not legal
-    template<typename OtherDerived> Derived& operator+=(const MatrixBase<OtherDerived>& mat)
-    {EIGEN_STATIC_ASSERT(sizeof(typename OtherDerived::Scalar)==-1,YOU_CANNOT_MIX_ARRAYS_AND_MATRICES);}
+    template<typename OtherDerived> Derived& operator+=(const MatrixBase<OtherDerived>& )
+    {EIGEN_STATIC_ASSERT(std::ptrdiff_t(sizeof(typename OtherDerived::Scalar))==-1,YOU_CANNOT_MIX_ARRAYS_AND_MATRICES); return *this;}
     // mixing arrays and matrices is not legal
-    template<typename OtherDerived> Derived& operator-=(const MatrixBase<OtherDerived>& mat)
-    {EIGEN_STATIC_ASSERT(sizeof(typename OtherDerived::Scalar)==-1,YOU_CANNOT_MIX_ARRAYS_AND_MATRICES);}
+    template<typename OtherDerived> Derived& operator-=(const MatrixBase<OtherDerived>& )
+    {EIGEN_STATIC_ASSERT(std::ptrdiff_t(sizeof(typename OtherDerived::Scalar))==-1,YOU_CANNOT_MIX_ARRAYS_AND_MATRICES); return *this;}
 };
 
 /** replaces \c *this by \c *this - \a other.
@@ -185,8 +174,8 @@ template<typename OtherDerived>
 EIGEN_STRONG_INLINE Derived &
 ArrayBase<Derived>::operator-=(const ArrayBase<OtherDerived> &other)
 {
-  SelfCwiseBinaryOp<ei_scalar_difference_op<Scalar>, Derived, OtherDerived> tmp(derived());
-  tmp = other;
+  SelfCwiseBinaryOp<internal::scalar_difference_op<Scalar>, Derived, OtherDerived> tmp(derived());
+  tmp = other.derived();
   return derived();
 }
 
@@ -199,7 +188,7 @@ template<typename OtherDerived>
 EIGEN_STRONG_INLINE Derived &
 ArrayBase<Derived>::operator+=(const ArrayBase<OtherDerived>& other)
 {
-  SelfCwiseBinaryOp<ei_scalar_sum_op<Scalar>, Derived, OtherDerived> tmp(derived());
+  SelfCwiseBinaryOp<internal::scalar_sum_op<Scalar>, Derived, OtherDerived> tmp(derived());
   tmp = other.derived();
   return derived();
 }
@@ -213,7 +202,7 @@ template<typename OtherDerived>
 EIGEN_STRONG_INLINE Derived &
 ArrayBase<Derived>::operator*=(const ArrayBase<OtherDerived>& other)
 {
-  SelfCwiseBinaryOp<ei_scalar_product_op<Scalar>, Derived, OtherDerived> tmp(derived());
+  SelfCwiseBinaryOp<internal::scalar_product_op<Scalar>, Derived, OtherDerived> tmp(derived());
   tmp = other.derived();
   return derived();
 }
@@ -227,9 +216,11 @@ template<typename OtherDerived>
 EIGEN_STRONG_INLINE Derived &
 ArrayBase<Derived>::operator/=(const ArrayBase<OtherDerived>& other)
 {
-  SelfCwiseBinaryOp<ei_scalar_quotient_op<Scalar>, Derived, OtherDerived> tmp(derived());
+  SelfCwiseBinaryOp<internal::scalar_quotient_op<Scalar>, Derived, OtherDerived> tmp(derived());
   tmp = other.derived();
   return derived();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_ARRAYBASE_H

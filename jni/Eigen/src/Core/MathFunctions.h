@@ -3,42 +3,31 @@
 //
 // Copyright (C) 2006-2010 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_MATHFUNCTIONS_H
 #define EIGEN_MATHFUNCTIONS_H
 
-/** \internal \struct ei_global_math_functions_filtering_base
+namespace Eigen {
+
+namespace internal {
+
+/** \internal \struct global_math_functions_filtering_base
   *
   * What it does:
   * Defines a typedef 'type' as follows:
   * - if type T has a member typedef Eigen_BaseClassForSpecializationOfGlobalMathFuncImpl, then
-  *   ei_global_math_functions_filtering_base<T>::type is a typedef for it.
-  * - otherwise, ei_global_math_functions_filtering_base<T>::type is a typedef for T.
+  *   global_math_functions_filtering_base<T>::type is a typedef for it.
+  * - otherwise, global_math_functions_filtering_base<T>::type is a typedef for T.
   *
   * How it's used:
-  * To allow to defined the global math functions (like ei_sin...) in certain cases, like the Array expressions.
-  * When you do ei_sin(array1+array2), the object array1+array2 has a complicated expression type, all what you want to know
-  * is that it inherits ArrayBase. So we implement a partial specialization of ei_sin_impl for ArrayBase<Derived>.
-  * So we must make sure to use ei_sin_impl<ArrayBase<Derived> > and not ei_sin_impl<Derived>, otherwise our partial specialization
-  * won't be used. How does ei_sin know that? That's exactly what ei_global_math_functions_filtering_base tells it.
+  * To allow to defined the global math functions (like sin...) in certain cases, like the Array expressions.
+  * When you do sin(array1+array2), the object array1+array2 has a complicated expression type, all what you want to know
+  * is that it inherits ArrayBase. So we implement a partial specialization of sin_impl for ArrayBase<Derived>.
+  * So we must make sure to use sin_impl<ArrayBase<Derived> > and not sin_impl<Derived>, otherwise our partial specialization
+  * won't be used. How does sin know that? That's exactly what global_math_functions_filtering_base tells it.
   *
   * How it's implemented:
   * SFINAE in the style of enable_if. Highly susceptible of breaking compilers. With GCC, it sure does work, but if you replace
@@ -46,32 +35,31 @@
   */
 
 template<typename T, typename dummy = void>
-struct ei_global_math_functions_filtering_base
+struct global_math_functions_filtering_base
 {
   typedef T type;
 };
 
-template<typename T> struct ei_always_void { typedef void type; };
+template<typename T> struct always_void { typedef void type; };
 
 template<typename T>
-struct ei_global_math_functions_filtering_base
+struct global_math_functions_filtering_base
   <T,
-   typename ei_always_void<typename T::Eigen_BaseClassForSpecializationOfGlobalMathFuncImpl>::type
+   typename always_void<typename T::Eigen_BaseClassForSpecializationOfGlobalMathFuncImpl>::type
   >
 {
   typedef typename T::Eigen_BaseClassForSpecializationOfGlobalMathFuncImpl type;
 };
 
-#define EIGEN_MATHFUNC_IMPL(func, scalar) ei_##func##_impl<typename ei_global_math_functions_filtering_base<scalar>::type>
-#define EIGEN_MATHFUNC_RETVAL(func, scalar) typename ei_##func##_retval<typename ei_global_math_functions_filtering_base<scalar>::type>::type
-
+#define EIGEN_MATHFUNC_IMPL(func, scalar) Eigen::internal::func##_impl<typename Eigen::internal::global_math_functions_filtering_base<scalar>::type>
+#define EIGEN_MATHFUNC_RETVAL(func, scalar) typename Eigen::internal::func##_retval<typename Eigen::internal::global_math_functions_filtering_base<scalar>::type>::type
 
 /****************************************************************************
-* Implementation of ei_real                                                 *
+* Implementation of real                                                 *
 ****************************************************************************/
 
-template<typename Scalar>
-struct ei_real_impl
+template<typename Scalar, bool IsComplex = NumTraits<Scalar>::IsComplex>
+struct real_default_impl
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar run(const Scalar& x)
@@ -80,33 +68,32 @@ struct ei_real_impl
   }
 };
 
-template<typename RealScalar>
-struct ei_real_impl<std::complex<RealScalar> >
+template<typename Scalar>
+struct real_default_impl<Scalar,true>
 {
-  static inline RealScalar run(const std::complex<RealScalar>& x)
+  typedef typename NumTraits<Scalar>::Real RealScalar;
+  static inline RealScalar run(const Scalar& x)
   {
-    return std::real(x);
+    using std::real;
+    return real(x);
   }
 };
 
+template<typename Scalar> struct real_impl : real_default_impl<Scalar> {};
+
 template<typename Scalar>
-struct ei_real_retval
+struct real_retval
 {
   typedef typename NumTraits<Scalar>::Real type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(real, Scalar) ei_real(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(real, Scalar)::run(x);
-}
 
 /****************************************************************************
-* Implementation of ei_imag                                                 *
+* Implementation of imag                                                 *
 ****************************************************************************/
 
-template<typename Scalar>
-struct ei_imag_impl
+template<typename Scalar, bool IsComplex = NumTraits<Scalar>::IsComplex>
+struct imag_default_impl
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar run(const Scalar&)
@@ -115,33 +102,31 @@ struct ei_imag_impl
   }
 };
 
-template<typename RealScalar>
-struct ei_imag_impl<std::complex<RealScalar> >
+template<typename Scalar>
+struct imag_default_impl<Scalar,true>
 {
-  static inline RealScalar run(const std::complex<RealScalar>& x)
+  typedef typename NumTraits<Scalar>::Real RealScalar;
+  static inline RealScalar run(const Scalar& x)
   {
-    return std::imag(x);
+    using std::imag;
+    return imag(x);
   }
 };
 
+template<typename Scalar> struct imag_impl : imag_default_impl<Scalar> {};
+
 template<typename Scalar>
-struct ei_imag_retval
+struct imag_retval
 {
   typedef typename NumTraits<Scalar>::Real type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(imag, Scalar) ei_imag(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(imag, Scalar)::run(x);
-}
-
 /****************************************************************************
-* Implementation of ei_real_ref                                             *
+* Implementation of real_ref                                             *
 ****************************************************************************/
 
 template<typename Scalar>
-struct ei_real_ref_impl
+struct real_ref_impl
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar& run(Scalar& x)
@@ -155,29 +140,17 @@ struct ei_real_ref_impl
 };
 
 template<typename Scalar>
-struct ei_real_ref_retval
+struct real_ref_retval
 {
   typedef typename NumTraits<Scalar>::Real & type;
 };
 
-template<typename Scalar>
-inline typename ei_makeconst< EIGEN_MATHFUNC_RETVAL(real_ref, Scalar) >::type ei_real_ref(const Scalar& x)
-{
-  return ei_real_ref_impl<Scalar>::run(x);
-}
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(real_ref, Scalar) ei_real_ref(Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(real_ref, Scalar)::run(x);
-}
-
 /****************************************************************************
-* Implementation of ei_imag_ref                                             *
+* Implementation of imag_ref                                             *
 ****************************************************************************/
 
 template<typename Scalar, bool IsComplex>
-struct ei_imag_ref_default_impl
+struct imag_ref_default_impl
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar& run(Scalar& x)
@@ -191,7 +164,7 @@ struct ei_imag_ref_default_impl
 };
 
 template<typename Scalar>
-struct ei_imag_ref_default_impl<Scalar, false>
+struct imag_ref_default_impl<Scalar, false>
 {
   static inline Scalar run(Scalar&)
   {
@@ -204,32 +177,20 @@ struct ei_imag_ref_default_impl<Scalar, false>
 };
 
 template<typename Scalar>
-struct ei_imag_ref_impl : ei_imag_ref_default_impl<Scalar, NumTraits<Scalar>::IsComplex> {};
+struct imag_ref_impl : imag_ref_default_impl<Scalar, NumTraits<Scalar>::IsComplex> {};
 
 template<typename Scalar>
-struct ei_imag_ref_retval
+struct imag_ref_retval
 {
   typedef typename NumTraits<Scalar>::Real & type;
 };
 
-template<typename Scalar>
-inline typename ei_makeconst< EIGEN_MATHFUNC_RETVAL(imag_ref, Scalar) >::type ei_imag_ref(const Scalar& x)
-{
-  return ei_imag_ref_impl<Scalar>::run(x);
-}
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(imag_ref, Scalar) ei_imag_ref(Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(imag_ref, Scalar)::run(x);
-}
-
 /****************************************************************************
-* Implementation of ei_conj                                                 *
+* Implementation of conj                                                 *
 ****************************************************************************/
 
-template<typename Scalar>
-struct ei_conj_impl
+template<typename Scalar, bool IsComplex = NumTraits<Scalar>::IsComplex>
+struct conj_impl
 {
   static inline Scalar run(const Scalar& x)
   {
@@ -237,59 +198,28 @@ struct ei_conj_impl
   }
 };
 
-template<typename RealScalar>
-struct ei_conj_impl<std::complex<RealScalar> >
+template<typename Scalar>
+struct conj_impl<Scalar,true>
 {
-  static inline std::complex<RealScalar> run(const std::complex<RealScalar>& x)
+  static inline Scalar run(const Scalar& x)
   {
-    return std::conj(x);
+    using std::conj;
+    return conj(x);
   }
 };
 
 template<typename Scalar>
-struct ei_conj_retval
+struct conj_retval
 {
   typedef Scalar type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(conj, Scalar) ei_conj(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(conj, Scalar)::run(x);
-}
-
 /****************************************************************************
-* Implementation of ei_abs                                                  *
+* Implementation of abs2                                                 *
 ****************************************************************************/
 
-template<typename Scalar>
-struct ei_abs_impl
-{
-  typedef typename NumTraits<Scalar>::Real RealScalar;
-  static inline RealScalar run(const Scalar& x)
-  {
-    return std::abs(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_abs_retval
-{
-  typedef typename NumTraits<Scalar>::Real type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(abs, Scalar) ei_abs(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(abs, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_abs2                                                 *
-****************************************************************************/
-
-template<typename Scalar>
-struct ei_abs2_impl
+template<typename Scalar,bool IsComplex>
+struct abs2_impl_default
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar run(const Scalar& x)
@@ -298,102 +228,102 @@ struct ei_abs2_impl
   }
 };
 
-template<typename RealScalar>
-struct ei_abs2_impl<std::complex<RealScalar> >
-{
-  static inline RealScalar run(const std::complex<RealScalar>& x)
-  {
-    return std::norm(x);
-  }
-};
-
 template<typename Scalar>
-struct ei_abs2_retval
-{
-  typedef typename NumTraits<Scalar>::Real type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(abs2, Scalar) ei_abs2(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(abs2, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_norm1                                                *
-****************************************************************************/
-
-template<typename Scalar, bool IsComplex>
-struct ei_norm1_default_impl
+struct abs2_impl_default<Scalar, true> // IsComplex
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar run(const Scalar& x)
   {
-    return ei_abs(ei_real(x)) + ei_abs(ei_imag(x));
+    return real(x)*real(x) + imag(x)*imag(x);
   }
 };
 
 template<typename Scalar>
-struct ei_norm1_default_impl<Scalar, false>
+struct abs2_impl
 {
-  static inline Scalar run(const Scalar& x)
+  typedef typename NumTraits<Scalar>::Real RealScalar;
+  static inline RealScalar run(const Scalar& x)
   {
-    return ei_abs(x);
+    return abs2_impl_default<Scalar,NumTraits<Scalar>::IsComplex>::run(x);
   }
 };
 
 template<typename Scalar>
-struct ei_norm1_impl : ei_norm1_default_impl<Scalar, NumTraits<Scalar>::IsComplex> {};
-
-template<typename Scalar>
-struct ei_norm1_retval
+struct abs2_retval
 {
   typedef typename NumTraits<Scalar>::Real type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(norm1, Scalar) ei_norm1(const Scalar& x)
+/****************************************************************************
+* Implementation of norm1                                                *
+****************************************************************************/
+
+template<typename Scalar, bool IsComplex>
+struct norm1_default_impl
 {
-  return EIGEN_MATHFUNC_IMPL(norm1, Scalar)::run(x);
-}
+  typedef typename NumTraits<Scalar>::Real RealScalar;
+  static inline RealScalar run(const Scalar& x)
+  {
+    using std::abs;
+    return abs(real(x)) + abs(imag(x));
+  }
+};
+
+template<typename Scalar>
+struct norm1_default_impl<Scalar, false>
+{
+  static inline Scalar run(const Scalar& x)
+  {
+    using std::abs;
+    return abs(x);
+  }
+};
+
+template<typename Scalar>
+struct norm1_impl : norm1_default_impl<Scalar, NumTraits<Scalar>::IsComplex> {};
+
+template<typename Scalar>
+struct norm1_retval
+{
+  typedef typename NumTraits<Scalar>::Real type;
+};
 
 /****************************************************************************
-* Implementation of ei_hypot                                                *
+* Implementation of hypot                                                *
 ****************************************************************************/
 
 template<typename Scalar>
-struct ei_hypot_impl
+struct hypot_impl
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline RealScalar run(const Scalar& x, const Scalar& y)
   {
-    RealScalar _x = ei_abs(x);
-    RealScalar _y = ei_abs(y);
-    RealScalar p = std::max(_x, _y);
-    RealScalar q = std::min(_x, _y);
+    using std::max;
+    using std::min;
+    using std::abs;
+    using std::sqrt;
+    RealScalar _x = abs(x);
+    RealScalar _y = abs(y);
+    RealScalar p = (max)(_x, _y);
+    if(p==RealScalar(0)) return RealScalar(0);
+    RealScalar q = (min)(_x, _y);
     RealScalar qp = q/p;
-    return p * ei_sqrt(RealScalar(1) + qp*qp);
+    return p * sqrt(RealScalar(1) + qp*qp);
   }
 };
 
 template<typename Scalar>
-struct ei_hypot_retval
+struct hypot_retval
 {
   typedef typename NumTraits<Scalar>::Real type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(hypot, Scalar) ei_hypot(const Scalar& x, const Scalar& y)
-{
-  return EIGEN_MATHFUNC_IMPL(hypot, Scalar)::run(x, y);
-}
-
 /****************************************************************************
-* Implementation of ei_cast                                                 *
+* Implementation of cast                                                 *
 ****************************************************************************/
 
 template<typename OldType, typename NewType>
-struct ei_cast_impl
+struct cast_impl
 {
   static inline NewType run(const OldType& x)
   {
@@ -401,220 +331,38 @@ struct ei_cast_impl
   }
 };
 
-// here, for once, we're plainly returning NewType: we don't want ei_cast to do weird things.
+// here, for once, we're plainly returning NewType: we don't want cast to do weird things.
 
 template<typename OldType, typename NewType>
-inline NewType ei_cast(const OldType& x)
+inline NewType cast(const OldType& x)
 {
-  return ei_cast_impl<OldType, NewType>::run(x);
+  return cast_impl<OldType, NewType>::run(x);
 }
 
 /****************************************************************************
-* Implementation of ei_sqrt                                                 *
+* Implementation of atanh2                                                *
 ****************************************************************************/
 
 template<typename Scalar, bool IsInteger>
-struct ei_sqrt_default_impl
-{
-  static inline Scalar run(const Scalar& x)
-  {
-    return std::sqrt(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_sqrt_default_impl<Scalar, true>
-{
-  static inline Scalar run(const Scalar&)
-  {
-    EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar)
-    return Scalar(0);
-  }
-};
-
-template<typename Scalar>
-struct ei_sqrt_impl : ei_sqrt_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
-
-template<typename Scalar>
-struct ei_sqrt_retval
-{
-  typedef Scalar type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(sqrt, Scalar) ei_sqrt(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(sqrt, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_exp                                                  *
-****************************************************************************/
-
-template<typename Scalar, bool IsInteger>
-struct ei_exp_default_impl
-{
-  static inline Scalar run(const Scalar& x)
-  {
-    return std::exp(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_exp_default_impl<Scalar, true>
-{
-  static inline Scalar run(const Scalar&)
-  {
-    EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar)
-    return Scalar(0);
-  }
-};
-
-template<typename Scalar>
-struct ei_exp_impl : ei_exp_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
-
-template<typename Scalar>
-struct ei_exp_retval
-{
-  typedef Scalar type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(exp, Scalar) ei_exp(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(exp, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_cos                                                  *
-****************************************************************************/
-
-template<typename Scalar, bool IsInteger>
-struct ei_cos_default_impl
-{
-  static inline Scalar run(const Scalar& x)
-  {
-    return std::cos(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_cos_default_impl<Scalar, true>
-{
-  static inline Scalar run(const Scalar&)
-  {
-    EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar)
-    return Scalar(0);
-  }
-};
-
-template<typename Scalar>
-struct ei_cos_impl : ei_cos_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
-
-template<typename Scalar>
-struct ei_cos_retval
-{
-  typedef Scalar type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(cos, Scalar) ei_cos(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(cos, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_sin                                                  *
-****************************************************************************/
-
-template<typename Scalar, bool IsInteger>
-struct ei_sin_default_impl
-{
-  static inline Scalar run(const Scalar& x)
-  {
-    return std::sin(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_sin_default_impl<Scalar, true>
-{
-  static inline Scalar run(const Scalar&)
-  {
-    EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar)
-    return Scalar(0);
-  }
-};
-
-template<typename Scalar>
-struct ei_sin_impl : ei_sin_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
-
-template<typename Scalar>
-struct ei_sin_retval
-{
-  typedef Scalar type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(sin, Scalar) ei_sin(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(sin, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_log                                                  *
-****************************************************************************/
-
-template<typename Scalar, bool IsInteger>
-struct ei_log_default_impl
-{
-  static inline Scalar run(const Scalar& x)
-  {
-    return std::log(x);
-  }
-};
-
-template<typename Scalar>
-struct ei_log_default_impl<Scalar, true>
-{
-  static inline Scalar run(const Scalar&)
-  {
-    EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar)
-    return Scalar(0);
-  }
-};
-
-template<typename Scalar>
-struct ei_log_impl : ei_log_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
-
-template<typename Scalar>
-struct ei_log_retval
-{
-  typedef Scalar type;
-};
-
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(log, Scalar) ei_log(const Scalar& x)
-{
-  return EIGEN_MATHFUNC_IMPL(log, Scalar)::run(x);
-}
-
-/****************************************************************************
-* Implementation of ei_atan2                                                *
-****************************************************************************/
-
-template<typename Scalar, bool IsInteger>
-struct ei_atan2_default_impl
+struct atanh2_default_impl
 {
   typedef Scalar retval;
+  typedef typename NumTraits<Scalar>::Real RealScalar;
   static inline Scalar run(const Scalar& x, const Scalar& y)
   {
-    return std::atan2(x, y);
+    using std::abs;
+    using std::log;
+    using std::sqrt;
+    Scalar z = x / y;
+    if (y == Scalar(0) || abs(z) > sqrt(NumTraits<RealScalar>::epsilon()))
+      return RealScalar(0.5) * log((y + x) / (y - x));
+    else
+      return z + z*z*z / RealScalar(3);
   }
 };
 
 template<typename Scalar>
-struct ei_atan2_default_impl<Scalar, true>
+struct atanh2_default_impl<Scalar, true>
 {
   static inline Scalar run(const Scalar&, const Scalar&)
   {
@@ -624,41 +372,36 @@ struct ei_atan2_default_impl<Scalar, true>
 };
 
 template<typename Scalar>
-struct ei_atan2_impl : ei_atan2_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
+struct atanh2_impl : atanh2_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
 
 template<typename Scalar>
-struct ei_atan2_retval
+struct atanh2_retval
 {
   typedef Scalar type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(atan2, Scalar) ei_atan2(const Scalar& x, const Scalar& y)
-{
-  return EIGEN_MATHFUNC_IMPL(atan2, Scalar)::run(x, y);
-}
-
 /****************************************************************************
-* Implementation of ei_pow                                                  *
+* Implementation of pow                                                  *
 ****************************************************************************/
 
 template<typename Scalar, bool IsInteger>
-struct ei_pow_default_impl
+struct pow_default_impl
 {
   typedef Scalar retval;
   static inline Scalar run(const Scalar& x, const Scalar& y)
   {
-    return std::pow(x, y);
+    using std::pow;
+    return pow(x, y);
   }
 };
 
 template<typename Scalar>
-struct ei_pow_default_impl<Scalar, true>
+struct pow_default_impl<Scalar, true>
 {
   static inline Scalar run(Scalar x, Scalar y)
   {
-    Scalar res = 1;
-    ei_assert(!NumTraits<Scalar>::IsSigned || y >= 0);
+    Scalar res(1);
+    eigen_assert(!NumTraits<Scalar>::IsSigned || y >= 0);
     if(y & 1) res *= x;
     y >>= 1;
     while(y)
@@ -672,47 +415,41 @@ struct ei_pow_default_impl<Scalar, true>
 };
 
 template<typename Scalar>
-struct ei_pow_impl : ei_pow_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
+struct pow_impl : pow_default_impl<Scalar, NumTraits<Scalar>::IsInteger> {};
 
 template<typename Scalar>
-struct ei_pow_retval
+struct pow_retval
 {
   typedef Scalar type;
 };
 
-template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(pow, Scalar) ei_pow(const Scalar& x, const Scalar& y)
-{
-  return EIGEN_MATHFUNC_IMPL(pow, Scalar)::run(x, y);
-}
-
 /****************************************************************************
-* Implementation of ei_random                                               *
+* Implementation of random                                               *
 ****************************************************************************/
 
 template<typename Scalar,
          bool IsComplex,
          bool IsInteger>
-struct ei_random_default_impl {};
+struct random_default_impl {};
 
 template<typename Scalar>
-struct ei_random_impl : ei_random_default_impl<Scalar, NumTraits<Scalar>::IsComplex, NumTraits<Scalar>::IsInteger> {};
+struct random_impl : random_default_impl<Scalar, NumTraits<Scalar>::IsComplex, NumTraits<Scalar>::IsInteger> {};
 
 template<typename Scalar>
-struct ei_random_retval
+struct random_retval
 {
   typedef Scalar type;
 };
 
-template<typename Scalar> inline EIGEN_MATHFUNC_RETVAL(random, Scalar) ei_random(const Scalar& x, const Scalar& y);
-template<typename Scalar> inline EIGEN_MATHFUNC_RETVAL(random, Scalar) ei_random();
+template<typename Scalar> inline EIGEN_MATHFUNC_RETVAL(random, Scalar) random(const Scalar& x, const Scalar& y);
+template<typename Scalar> inline EIGEN_MATHFUNC_RETVAL(random, Scalar) random();
 
 template<typename Scalar>
-struct ei_random_default_impl<Scalar, false, false>
+struct random_default_impl<Scalar, false, false>
 {
   static inline Scalar run(const Scalar& x, const Scalar& y)
   {
-    return x + (y-x) * Scalar(std::rand()) / float(RAND_MAX);
+    return x + (y-x) * Scalar(std::rand()) / Scalar(RAND_MAX);
   }
   static inline Scalar run()
   {
@@ -720,45 +457,208 @@ struct ei_random_default_impl<Scalar, false, false>
   }
 };
 
+enum {
+  floor_log2_terminate,
+  floor_log2_move_up,
+  floor_log2_move_down,
+  floor_log2_bogus
+};
+
+template<unsigned int n, int lower, int upper> struct floor_log2_selector
+{
+  enum { middle = (lower + upper) / 2,
+         value = (upper <= lower + 1) ? int(floor_log2_terminate)
+               : (n < (1 << middle)) ? int(floor_log2_move_down)
+               : (n==0) ? int(floor_log2_bogus)
+               : int(floor_log2_move_up)
+  };
+};
+
+template<unsigned int n,
+         int lower = 0,
+         int upper = sizeof(unsigned int) * CHAR_BIT - 1,
+         int selector = floor_log2_selector<n, lower, upper>::value>
+struct floor_log2 {};
+
+template<unsigned int n, int lower, int upper>
+struct floor_log2<n, lower, upper, floor_log2_move_down>
+{
+  enum { value = floor_log2<n, lower, floor_log2_selector<n, lower, upper>::middle>::value };
+};
+
+template<unsigned int n, int lower, int upper>
+struct floor_log2<n, lower, upper, floor_log2_move_up>
+{
+  enum { value = floor_log2<n, floor_log2_selector<n, lower, upper>::middle, upper>::value };
+};
+
+template<unsigned int n, int lower, int upper>
+struct floor_log2<n, lower, upper, floor_log2_terminate>
+{
+  enum { value = (n >= ((unsigned int)(1) << (lower+1))) ? lower+1 : lower };
+};
+
+template<unsigned int n, int lower, int upper>
+struct floor_log2<n, lower, upper, floor_log2_bogus>
+{
+  // no value, error at compile time
+};
+
 template<typename Scalar>
-struct ei_random_default_impl<Scalar, false, true>
+struct random_default_impl<Scalar, false, true>
 {
   static inline Scalar run(const Scalar& x, const Scalar& y)
   {
-    return x + Scalar((y-x+1) * (std::rand() / (RAND_MAX + typename NumTraits<Scalar>::NonInteger(1))));
+    typedef typename conditional<NumTraits<Scalar>::IsSigned,std::ptrdiff_t,std::size_t>::type ScalarX;
+    if(y<x)
+      return x;
+    // the following difference might overflow on a 32 bits system,
+    // but since y>=x the result converted to an unsigned long is still correct.
+    std::size_t range = ScalarX(y)-ScalarX(x);
+    std::size_t offset = 0;
+    // rejection sampling
+    std::size_t divisor = 1;
+    std::size_t multiplier = 1;
+    if(range<RAND_MAX) divisor = (std::size_t(RAND_MAX)+1)/(range+1);
+    else               multiplier = 1 + range/(std::size_t(RAND_MAX)+1);
+    do {
+      offset = (std::size_t(std::rand()) * multiplier) / divisor;
+    } while (offset > range);
+    return Scalar(ScalarX(x) + offset);
   }
+
   static inline Scalar run()
   {
+#ifdef EIGEN_MAKING_DOCS
     return run(Scalar(NumTraits<Scalar>::IsSigned ? -10 : 0), Scalar(10));
+#else
+    enum { rand_bits = floor_log2<(unsigned int)(RAND_MAX)+1>::value,
+           scalar_bits = sizeof(Scalar) * CHAR_BIT,
+           shift = EIGEN_PLAIN_ENUM_MAX(0, int(rand_bits) - int(scalar_bits)),
+           offset = NumTraits<Scalar>::IsSigned ? (1 << (EIGEN_PLAIN_ENUM_MIN(rand_bits,scalar_bits)-1)) : 0
+    };
+    return Scalar((std::rand() >> shift) - offset);
+#endif
   }
 };
 
 template<typename Scalar>
-struct ei_random_default_impl<Scalar, true, false>
+struct random_default_impl<Scalar, true, false>
 {
   static inline Scalar run(const Scalar& x, const Scalar& y)
   {
-    return Scalar(ei_random(ei_real(x), ei_real(y)),
-                  ei_random(ei_imag(x), ei_imag(y)));
+    return Scalar(random(real(x), real(y)),
+                  random(imag(x), imag(y)));
   }
   static inline Scalar run()
   {
     typedef typename NumTraits<Scalar>::Real RealScalar;
-    return Scalar(ei_random<RealScalar>(), ei_random<RealScalar>());
+    return Scalar(random<RealScalar>(), random<RealScalar>());
   }
 };
 
 template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(random, Scalar) ei_random(const Scalar& x, const Scalar& y)
+inline EIGEN_MATHFUNC_RETVAL(random, Scalar) random(const Scalar& x, const Scalar& y)
 {
   return EIGEN_MATHFUNC_IMPL(random, Scalar)::run(x, y);
 }
 
 template<typename Scalar>
-inline EIGEN_MATHFUNC_RETVAL(random, Scalar) ei_random()
+inline EIGEN_MATHFUNC_RETVAL(random, Scalar) random()
 {
   return EIGEN_MATHFUNC_IMPL(random, Scalar)::run();
 }
+
+} // end namespace internal
+
+/****************************************************************************
+* Generic math function                                                    *
+****************************************************************************/
+
+namespace numext {
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(real, Scalar) real(const Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(real, Scalar)::run(x);
+}  
+
+template<typename Scalar>
+inline typename internal::add_const_on_value_type< EIGEN_MATHFUNC_RETVAL(real_ref, Scalar) >::type real_ref(const Scalar& x)
+{
+  return internal::real_ref_impl<Scalar>::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(real_ref, Scalar) real_ref(Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(real_ref, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(imag, Scalar) imag(const Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(imag, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline typename internal::add_const_on_value_type< EIGEN_MATHFUNC_RETVAL(imag_ref, Scalar) >::type imag_ref(const Scalar& x)
+{
+  return internal::imag_ref_impl<Scalar>::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(imag_ref, Scalar) imag_ref(Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(imag_ref, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(conj, Scalar) conj(const Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(conj, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(abs2, Scalar) abs2(const Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(abs2, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(norm1, Scalar) norm1(const Scalar& x)
+{
+  return EIGEN_MATHFUNC_IMPL(norm1, Scalar)::run(x);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(hypot, Scalar) hypot(const Scalar& x, const Scalar& y)
+{
+  return EIGEN_MATHFUNC_IMPL(hypot, Scalar)::run(x, y);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(atanh2, Scalar) atanh2(const Scalar& x, const Scalar& y)
+{
+  return EIGEN_MATHFUNC_IMPL(atanh2, Scalar)::run(x, y);
+}
+
+template<typename Scalar>
+inline EIGEN_MATHFUNC_RETVAL(pow, Scalar) pow(const Scalar& x, const Scalar& y)
+{
+  return EIGEN_MATHFUNC_IMPL(pow, Scalar)::run(x, y);
+}
+
+// std::isfinite is non standard, so let's define our own version,
+// even though it is not very efficient.
+template<typename T> bool (isfinite)(const T& x)
+{
+  return x<NumTraits<T>::highest() && x>NumTraits<T>::lowest();
+}
+
+} // end namespace numext
+
+namespace internal {
 
 /****************************************************************************
 * Implementation of fuzzy comparisons                                       *
@@ -767,20 +667,23 @@ inline EIGEN_MATHFUNC_RETVAL(random, Scalar) ei_random()
 template<typename Scalar,
          bool IsComplex,
          bool IsInteger>
-struct ei_scalar_fuzzy_default_impl {};
+struct scalar_fuzzy_default_impl {};
 
 template<typename Scalar>
-struct ei_scalar_fuzzy_default_impl<Scalar, false, false>
+struct scalar_fuzzy_default_impl<Scalar, false, false>
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   template<typename OtherScalar>
   static inline bool isMuchSmallerThan(const Scalar& x, const OtherScalar& y, const RealScalar& prec)
   {
-    return ei_abs(x) <= ei_abs(y) * prec;
+    using std::abs;
+    return abs(x) <= abs(y) * prec;
   }
   static inline bool isApprox(const Scalar& x, const Scalar& y, const RealScalar& prec)
   {
-    return ei_abs(x - y) <= std::min(ei_abs(x), ei_abs(y)) * prec;
+    using std::min;
+    using std::abs;
+    return abs(x - y) <= (min)(abs(x), abs(y)) * prec;
   }
   static inline bool isApproxOrLessThan(const Scalar& x, const Scalar& y, const RealScalar& prec)
   {
@@ -789,7 +692,7 @@ struct ei_scalar_fuzzy_default_impl<Scalar, false, false>
 };
 
 template<typename Scalar>
-struct ei_scalar_fuzzy_default_impl<Scalar, false, true>
+struct scalar_fuzzy_default_impl<Scalar, false, true>
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   template<typename OtherScalar>
@@ -808,62 +711,82 @@ struct ei_scalar_fuzzy_default_impl<Scalar, false, true>
 };
 
 template<typename Scalar>
-struct ei_scalar_fuzzy_default_impl<Scalar, true, false>
+struct scalar_fuzzy_default_impl<Scalar, true, false>
 {
   typedef typename NumTraits<Scalar>::Real RealScalar;
   template<typename OtherScalar>
   static inline bool isMuchSmallerThan(const Scalar& x, const OtherScalar& y, const RealScalar& prec)
   {
-    return ei_abs2(x) <= ei_abs2(y) * prec * prec;
+    return numext::abs2(x) <= numext::abs2(y) * prec * prec;
   }
   static inline bool isApprox(const Scalar& x, const Scalar& y, const RealScalar& prec)
   {
-    return ei_abs2(x - y) <= std::min(ei_abs2(x), ei_abs2(y)) * prec * prec;
+    using std::min;
+    return numext::abs2(x - y) <= (min)(numext::abs2(x), numext::abs2(y)) * prec * prec;
   }
 };
 
 template<typename Scalar>
-struct ei_scalar_fuzzy_impl : ei_scalar_fuzzy_default_impl<Scalar, NumTraits<Scalar>::IsComplex, NumTraits<Scalar>::IsInteger> {};
+struct scalar_fuzzy_impl : scalar_fuzzy_default_impl<Scalar, NumTraits<Scalar>::IsComplex, NumTraits<Scalar>::IsInteger> {};
 
 template<typename Scalar, typename OtherScalar>
-inline bool ei_isMuchSmallerThan(const Scalar& x, const OtherScalar& y,
-                                   typename NumTraits<Scalar>::Real precision = NumTraits<Scalar>::dummy_precision())
+inline bool isMuchSmallerThan(const Scalar& x, const OtherScalar& y,
+                              const typename NumTraits<Scalar>::Real &precision = NumTraits<Scalar>::dummy_precision())
 {
-  return ei_scalar_fuzzy_impl<Scalar>::template isMuchSmallerThan<OtherScalar>(x, y, precision);
+  return scalar_fuzzy_impl<Scalar>::template isMuchSmallerThan<OtherScalar>(x, y, precision);
 }
 
 template<typename Scalar>
-inline bool ei_isApprox(const Scalar& x, const Scalar& y,
-                          typename NumTraits<Scalar>::Real precision = NumTraits<Scalar>::dummy_precision())
+inline bool isApprox(const Scalar& x, const Scalar& y,
+                     const typename NumTraits<Scalar>::Real &precision = NumTraits<Scalar>::dummy_precision())
 {
-  return ei_scalar_fuzzy_impl<Scalar>::isApprox(x, y, precision);
+  return scalar_fuzzy_impl<Scalar>::isApprox(x, y, precision);
 }
 
 template<typename Scalar>
-inline bool ei_isApproxOrLessThan(const Scalar& x, const Scalar& y,
-                                    typename NumTraits<Scalar>::Real precision = NumTraits<Scalar>::dummy_precision())
+inline bool isApproxOrLessThan(const Scalar& x, const Scalar& y,
+                               const typename NumTraits<Scalar>::Real &precision = NumTraits<Scalar>::dummy_precision())
 {
-  return ei_scalar_fuzzy_impl<Scalar>::isApproxOrLessThan(x, y, precision);
+  return scalar_fuzzy_impl<Scalar>::isApproxOrLessThan(x, y, precision);
 }
 
 /******************************************
 ***  The special case of the  bool type ***
 ******************************************/
 
-template<> struct ei_random_impl<bool>
+template<> struct random_impl<bool>
 {
   static inline bool run()
   {
-    return ei_random<int>(0,1)==0 ? false : true;
+    return random<int>(0,1)==0 ? false : true;
   }
 };
 
-template<> struct ei_scalar_fuzzy_impl<bool>
+template<> struct scalar_fuzzy_impl<bool>
 {
+  typedef bool RealScalar;
+  
+  template<typename OtherScalar>
+  static inline bool isMuchSmallerThan(const bool& x, const bool&, const bool&)
+  {
+    return !x;
+  }
+  
   static inline bool isApprox(bool x, bool y, bool)
   {
     return x == y;
   }
+
+  static inline bool isApproxOrLessThan(const bool& x, const bool& y, const bool&)
+  {
+    return (!x) || y;
+  }
+  
 };
+
+  
+} // end namespace internal
+
+} // end namespace Eigen
 
 #endif // EIGEN_MATHFUNCTIONS_H

@@ -3,32 +3,18 @@
 //
 // Copyright (C) 2009 Claire Maurice
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
-// Copyright (C) 2010 Jitse Niesen <jitse@maths.leeds.ac.uk>
+// Copyright (C) 2010,2012 Jitse Niesen <jitse@maths.leeds.ac.uk>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_COMPLEX_EIGEN_SOLVER_H
 #define EIGEN_COMPLEX_EIGEN_SOLVER_H
 
-#include "./EigenvaluesCommon.h"
 #include "./ComplexSchur.h"
+
+namespace Eigen { 
 
 /** \eigenvalues_module \ingroup Eigenvalues_Module
   *
@@ -96,7 +82,7 @@ template<typename _MatrixType> class ComplexEigenSolver
       * This is a square matrix with entries of type #ComplexScalar.
       * The size is the same as the size of #MatrixType.
       */
-    typedef Matrix<ComplexScalar, RowsAtCompileTime, ColsAtCompileTime, Options, MaxRowsAtCompileTime, ColsAtCompileTime> EigenvectorType;
+    typedef Matrix<ComplexScalar, RowsAtCompileTime, ColsAtCompileTime, Options, MaxRowsAtCompileTime, MaxColsAtCompileTime> EigenvectorType;
 
     /** \brief Default constructor.
       *
@@ -169,8 +155,8 @@ template<typename _MatrixType> class ComplexEigenSolver
       */
     const EigenvectorType& eigenvectors() const
     {
-      ei_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
-      ei_assert(m_eigenvectorsOk && "The eigenvectors have not been computed together with the eigenvalues.");
+      eigen_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
+      eigen_assert(m_eigenvectorsOk && "The eigenvectors have not been computed together with the eigenvalues.");
       return m_eivec;
     }
 
@@ -186,14 +172,15 @@ template<typename _MatrixType> class ComplexEigenSolver
       * This function returns a column vector containing the
       * eigenvalues. Eigenvalues are repeated according to their
       * algebraic multiplicity, so there are as many eigenvalues as
-      * rows in the matrix.
+      * rows in the matrix. The eigenvalues are not sorted in any particular
+      * order.
       *
       * Example: \include ComplexEigenSolver_eigenvalues.cpp
       * Output: \verbinclude ComplexEigenSolver_eigenvalues.out
       */
     const EigenvalueType& eigenvalues() const
     {
-      ei_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
+      eigen_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
       return m_eivalues;
     }
 
@@ -229,11 +216,30 @@ template<typename _MatrixType> class ComplexEigenSolver
       */
     ComputationInfo info() const
     {
-      ei_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
+      eigen_assert(m_isInitialized && "ComplexEigenSolver is not initialized.");
       return m_schur.info();
     }
 
+    /** \brief Sets the maximum number of iterations allowed. */
+    ComplexEigenSolver& setMaxIterations(Index maxIters)
+    {
+      m_schur.setMaxIterations(maxIters);
+      return *this;
+    }
+
+    /** \brief Returns the maximum number of iterations. */
+    Index getMaxIterations()
+    {
+      return m_schur.getMaxIterations();
+    }
+
   protected:
+    
+    static void check_template_parameters()
+    {
+      EIGEN_STATIC_ASSERT_NON_INTEGER(Scalar);
+    }
+    
     EigenvectorType m_eivec;
     EigenvalueType m_eivalues;
     ComplexSchur<MatrixType> m_schur;
@@ -242,16 +248,19 @@ template<typename _MatrixType> class ComplexEigenSolver
     EigenvectorType m_matX;
 
   private:
-    void doComputeEigenvectors(RealScalar matrixnorm);
+    void doComputeEigenvectors(const RealScalar& matrixnorm);
     void sortEigenvalues(bool computeEigenvectors);
 };
 
 
 template<typename MatrixType>
-ComplexEigenSolver<MatrixType>& ComplexEigenSolver<MatrixType>::compute(const MatrixType& matrix, bool computeEigenvectors)
+ComplexEigenSolver<MatrixType>& 
+ComplexEigenSolver<MatrixType>::compute(const MatrixType& matrix, bool computeEigenvectors)
 {
+  check_template_parameters();
+  
   // this code is inspired from Jampack
-  assert(matrix.cols() == matrix.rows());
+  eigen_assert(matrix.cols() == matrix.rows());
 
   // Do a complex Schur decomposition, A = U T U^*
   // The eigenvalues are on the diagonal of T.
@@ -272,7 +281,7 @@ ComplexEigenSolver<MatrixType>& ComplexEigenSolver<MatrixType>::compute(const Ma
 
 
 template<typename MatrixType>
-void ComplexEigenSolver<MatrixType>::doComputeEigenvectors(RealScalar matrixnorm)
+void ComplexEigenSolver<MatrixType>::doComputeEigenvectors(const RealScalar& matrixnorm)
 {
   const Index n = m_eivalues.size();
 
@@ -293,7 +302,7 @@ void ComplexEigenSolver<MatrixType>::doComputeEigenvectors(RealScalar matrixnorm
       {
         // If the i-th and k-th eigenvalue are equal, then z equals 0.
         // Use a small value instead, to prevent division by zero.
-        ei_real_ref(z) = NumTraits<RealScalar>::epsilon() * matrixnorm;
+        numext::real_ref(z) = NumTraits<RealScalar>::epsilon() * matrixnorm;
       }
       m_matX.coeffRef(i,k) = m_matX.coeff(i,k) / z;
     }
@@ -327,5 +336,6 @@ void ComplexEigenSolver<MatrixType>::sortEigenvalues(bool computeEigenvectors)
   }
 }
 
+} // end namespace Eigen
 
 #endif // EIGEN_COMPLEX_EIGEN_SOLVER_H

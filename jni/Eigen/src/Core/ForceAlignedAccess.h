@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2009-2010 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_FORCEALIGNEDACCESS_H
 #define EIGEN_FORCEALIGNEDACCESS_H
+
+namespace Eigen {
 
 /** \class ForceAlignedAccess
   * \ingroup Core_Module
@@ -37,16 +24,19 @@
   *
   * \sa MatrixBase::forceAlignedAccess()
   */
+
+namespace internal {
 template<typename ExpressionType>
-struct ei_traits<ForceAlignedAccess<ExpressionType> > : public ei_traits<ExpressionType>
+struct traits<ForceAlignedAccess<ExpressionType> > : public traits<ExpressionType>
 {};
+}
 
 template<typename ExpressionType> class ForceAlignedAccess
-  : public ei_dense_xpr_base< ForceAlignedAccess<ExpressionType> >::type
+  : public internal::dense_xpr_base< ForceAlignedAccess<ExpressionType> >::type
 {
   public:
 
-    typedef typename ei_dense_xpr_base<ForceAlignedAccess>::type Base;
+    typedef typename internal::dense_xpr_base<ForceAlignedAccess>::type Base;
     EIGEN_DENSE_PUBLIC_INTERFACE(ForceAlignedAccess)
 
     inline ForceAlignedAccess(const ExpressionType& matrix) : m_expression(matrix) {}
@@ -134,7 +124,7 @@ MatrixBase<Derived>::forceAlignedAccess()
   */
 template<typename Derived>
 template<bool Enable>
-inline typename ei_makeconst<typename ei_meta_if<Enable,ForceAlignedAccess<Derived>,Derived&>::ret>::type
+inline typename internal::add_const_on_value_type<typename internal::conditional<Enable,ForceAlignedAccess<Derived>,Derived&>::type>::type
 MatrixBase<Derived>::forceAlignedAccessIf() const
 {
   return derived();
@@ -145,10 +135,12 @@ MatrixBase<Derived>::forceAlignedAccessIf() const
   */
 template<typename Derived>
 template<bool Enable>
-inline typename ei_meta_if<Enable,ForceAlignedAccess<Derived>,Derived&>::ret
+inline typename internal::conditional<Enable,ForceAlignedAccess<Derived>,Derived&>::type
 MatrixBase<Derived>::forceAlignedAccessIf()
 {
   return derived();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_FORCEALIGNEDACCESS_H

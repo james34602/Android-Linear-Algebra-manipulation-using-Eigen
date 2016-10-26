@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2010 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_STRIDE_H
 #define EIGEN_STRIDE_H
+
+namespace Eigen { 
 
 /** \class Stride
   * \ingroup Core_Module
@@ -51,7 +38,7 @@
   * \include Map_general_stride.cpp
   * Output: \verbinclude Map_general_stride.out
   *
-  * \sa class InnerStride, class OuterStride
+  * \sa class InnerStride, class OuterStride, \ref TopicStorageOrders
   */
 template<int _OuterStrideAtCompileTime, int _InnerStrideAtCompileTime>
 class Stride
@@ -67,14 +54,14 @@ class Stride
     Stride()
       : m_outer(OuterStrideAtCompileTime), m_inner(InnerStrideAtCompileTime)
     {
-      ei_assert(InnerStrideAtCompileTime != Dynamic && OuterStrideAtCompileTime != Dynamic);
+      eigen_assert(InnerStrideAtCompileTime != Dynamic && OuterStrideAtCompileTime != Dynamic);
     }
 
     /** Constructor allowing to pass the strides at runtime */
     Stride(Index outerStride, Index innerStride)
       : m_outer(outerStride), m_inner(innerStride)
     {
-      ei_assert(innerStride>=0 && outerStride>=0);
+      eigen_assert(innerStride>=0 && outerStride>=0);
     }
 
     /** Copy constructor */
@@ -88,8 +75,8 @@ class Stride
     inline Index inner() const { return m_inner.value(); }
 
   protected:
-    ei_variable_if_dynamic<Index, OuterStrideAtCompileTime> m_outer;
-    ei_variable_if_dynamic<Index, InnerStrideAtCompileTime> m_inner;
+    internal::variable_if_dynamic<Index, OuterStrideAtCompileTime> m_outer;
+    internal::variable_if_dynamic<Index, InnerStrideAtCompileTime> m_inner;
 };
 
 /** \brief Convenience specialization of Stride to specify only an inner stride
@@ -115,5 +102,7 @@ class OuterStride : public Stride<Value, 0>
     OuterStride() : Base() {}
     OuterStride(Index v) : Base(v,0) {}
 };
+
+} // end namespace Eigen
 
 #endif // EIGEN_STRIDE_H

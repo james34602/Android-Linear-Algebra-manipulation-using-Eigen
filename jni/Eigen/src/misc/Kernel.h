@@ -3,33 +3,22 @@
 //
 // Copyright (C) 2009 Benoit Jacob <jacob.benoit.1@gmail.com>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_MISC_KERNEL_H
 #define EIGEN_MISC_KERNEL_H
 
-/** \class ei_kernel_retval_base
+namespace Eigen { 
+
+namespace internal {
+
+/** \class kernel_retval_base
   *
   */
 template<typename DecompositionType>
-struct ei_traits<ei_kernel_retval_base<DecompositionType> >
+struct traits<kernel_retval_base<DecompositionType> >
 {
   typedef typename DecompositionType::MatrixType MatrixType;
   typedef Matrix<
@@ -45,14 +34,14 @@ struct ei_traits<ei_kernel_retval_base<DecompositionType> >
   > ReturnType;
 };
 
-template<typename _DecompositionType> struct ei_kernel_retval_base
- : public ReturnByValue<ei_kernel_retval_base<_DecompositionType> >
+template<typename _DecompositionType> struct kernel_retval_base
+ : public ReturnByValue<kernel_retval_base<_DecompositionType> >
 {
   typedef _DecompositionType DecompositionType;
-  typedef ReturnByValue<ei_kernel_retval_base> Base;
+  typedef ReturnByValue<kernel_retval_base> Base;
   typedef typename Base::Index Index;
 
-  ei_kernel_retval_base(const DecompositionType& dec)
+  kernel_retval_base(const DecompositionType& dec)
     : m_dec(dec),
       m_rank(dec.rank()),
       m_cols(m_rank==dec.cols() ? 1 : dec.cols() - m_rank)
@@ -65,7 +54,7 @@ template<typename _DecompositionType> struct ei_kernel_retval_base
 
   template<typename Dest> inline void evalTo(Dest& dst) const
   {
-    static_cast<const ei_kernel_retval<DecompositionType>*>(this)->evalTo(dst);
+    static_cast<const kernel_retval<DecompositionType>*>(this)->evalTo(dst);
   }
 
   protected:
@@ -73,16 +62,20 @@ template<typename _DecompositionType> struct ei_kernel_retval_base
     Index m_rank, m_cols;
 };
 
+} // end namespace internal
+
 #define EIGEN_MAKE_KERNEL_HELPERS(DecompositionType) \
   typedef typename DecompositionType::MatrixType MatrixType; \
   typedef typename MatrixType::Scalar Scalar; \
   typedef typename MatrixType::RealScalar RealScalar; \
   typedef typename MatrixType::Index Index; \
-  typedef ei_kernel_retval_base<DecompositionType> Base; \
+  typedef Eigen::internal::kernel_retval_base<DecompositionType> Base; \
   using Base::dec; \
   using Base::rank; \
   using Base::rows; \
   using Base::cols; \
-  ei_kernel_retval(const DecompositionType& dec) : Base(dec) {}
+  kernel_retval(const DecompositionType& dec) : Base(dec) {}
+
+} // end namespace Eigen
 
 #endif // EIGEN_MISC_KERNEL_H

@@ -4,28 +4,14 @@
 // Copyright (C) 2009 Benoit Jacob <jacob.benoit.1@gmail.com>
 // Copyright (C) 2009 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_EIGENBASE_H
 #define EIGEN_EIGENBASE_H
 
+namespace Eigen {
 
 /** Common base class for all classes T such that MatrixBase has an operator=(T) and a constructor MatrixBase(T).
   *
@@ -39,10 +25,10 @@
   */
 template<typename Derived> struct EigenBase
 {
-//   typedef typename ei_plain_matrix_type<Derived>::type PlainObject;
+//   typedef typename internal::plain_matrix_type<Derived>::type PlainObject;
 
-  typedef typename ei_traits<Derived>::StorageKind StorageKind;
-  typedef typename ei_traits<Derived>::Index Index;
+  typedef typename internal::traits<Derived>::StorageKind StorageKind;
+  typedef typename internal::traits<Derived>::Index Index;
 
   /** \returns a reference to the derived object */
   Derived& derived() { return *static_cast<Derived*>(this); }
@@ -51,6 +37,8 @@ template<typename Derived> struct EigenBase
 
   inline Derived& const_cast_derived() const
   { return *static_cast<Derived*>(const_cast<EigenBase*>(this)); }
+  inline const Derived& const_derived() const
+  { return *static_cast<const Derived*>(this); }
 
   /** \returns the number of rows. \sa cols(), RowsAtCompileTime */
   inline Index rows() const { return derived().rows(); }
@@ -138,33 +126,6 @@ Derived& DenseBase<Derived>::operator-=(const EigenBase<OtherDerived> &other)
   return derived();
 }
 
-/** replaces \c *this by \c *this * \a other.
-  *
-  * \returns a reference to \c *this
-  */
-template<typename Derived>
-template<typename OtherDerived>
-inline Derived&
-MatrixBase<Derived>::operator*=(const EigenBase<OtherDerived> &other)
-{
-  other.derived().applyThisOnTheRight(derived());
-  return derived();
-}
-
-/** replaces \c *this by \c *this * \a other. It is equivalent to MatrixBase::operator*=() */
-template<typename Derived>
-template<typename OtherDerived>
-inline void MatrixBase<Derived>::applyOnTheRight(const EigenBase<OtherDerived> &other)
-{
-  other.derived().applyThisOnTheRight(derived());
-}
-
-/** replaces \c *this by \c *this * \a other. */
-template<typename Derived>
-template<typename OtherDerived>
-inline void MatrixBase<Derived>::applyOnTheLeft(const EigenBase<OtherDerived> &other)
-{
-  other.derived().applyThisOnTheLeft(derived());
-}
+} // end namespace Eigen
 
 #endif // EIGEN_EIGENBASE_H

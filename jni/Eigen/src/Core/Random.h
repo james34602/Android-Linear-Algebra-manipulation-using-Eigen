@@ -3,36 +3,28 @@
 //
 // Copyright (C) 2008 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_RANDOM_H
 #define EIGEN_RANDOM_H
 
-template<typename Scalar> struct ei_scalar_random_op {
-  EIGEN_EMPTY_STRUCT_CTOR(ei_scalar_random_op)
+namespace Eigen { 
+
+namespace internal {
+
+template<typename Scalar> struct scalar_random_op {
+  EIGEN_EMPTY_STRUCT_CTOR(scalar_random_op)
   template<typename Index>
-  inline const Scalar operator() (Index, Index = 0) const { return ei_random<Scalar>(); }
+  inline const Scalar operator() (Index, Index = 0) const { return random<Scalar>(); }
 };
+
 template<typename Scalar>
-struct ei_functor_traits<ei_scalar_random_op<Scalar> >
+struct functor_traits<scalar_random_op<Scalar> >
 { enum { Cost = 5 * NumTraits<Scalar>::MulCost, PacketAccess = false, IsRepeatable = false }; };
+
+} // end namespace internal
 
 /** \returns a random matrix expression
   *
@@ -53,10 +45,10 @@ struct ei_functor_traits<ei_scalar_random_op<Scalar> >
   * \sa MatrixBase::setRandom(), MatrixBase::Random(Index), MatrixBase::Random()
   */
 template<typename Derived>
-inline const CwiseNullaryOp<ei_scalar_random_op<typename ei_traits<Derived>::Scalar>, Derived>
+inline const CwiseNullaryOp<internal::scalar_random_op<typename internal::traits<Derived>::Scalar>, Derived>
 DenseBase<Derived>::Random(Index rows, Index cols)
 {
-  return NullaryExpr(rows, cols, ei_scalar_random_op<Scalar>());
+  return NullaryExpr(rows, cols, internal::scalar_random_op<Scalar>());
 }
 
 /** \returns a random vector expression
@@ -80,10 +72,10 @@ DenseBase<Derived>::Random(Index rows, Index cols)
   * \sa MatrixBase::setRandom(), MatrixBase::Random(Index,Index), MatrixBase::Random()
   */
 template<typename Derived>
-inline const CwiseNullaryOp<ei_scalar_random_op<typename ei_traits<Derived>::Scalar>, Derived>
+inline const CwiseNullaryOp<internal::scalar_random_op<typename internal::traits<Derived>::Scalar>, Derived>
 DenseBase<Derived>::Random(Index size)
 {
-  return NullaryExpr(size, ei_scalar_random_op<Scalar>());
+  return NullaryExpr(size, internal::scalar_random_op<Scalar>());
 }
 
 /** \returns a fixed-size random matrix or vector expression
@@ -101,10 +93,10 @@ DenseBase<Derived>::Random(Index size)
   * \sa MatrixBase::setRandom(), MatrixBase::Random(Index,Index), MatrixBase::Random(Index)
   */
 template<typename Derived>
-inline const CwiseNullaryOp<ei_scalar_random_op<typename ei_traits<Derived>::Scalar>, Derived>
+inline const CwiseNullaryOp<internal::scalar_random_op<typename internal::traits<Derived>::Scalar>, Derived>
 DenseBase<Derived>::Random()
 {
-  return NullaryExpr(RowsAtCompileTime, ColsAtCompileTime, ei_scalar_random_op<Scalar>());
+  return NullaryExpr(RowsAtCompileTime, ColsAtCompileTime, internal::scalar_random_op<Scalar>());
 }
 
 /** Sets all coefficients in this expression to random values.
@@ -120,7 +112,7 @@ inline Derived& DenseBase<Derived>::setRandom()
   return *this = Random(rows(), cols());
 }
 
-/** Resizes to the given \a size, and sets all coefficients in this expression to random values.
+/** Resizes to the given \a newSize, and sets all coefficients in this expression to random values.
   *
   * \only_for_vectors
   *
@@ -131,16 +123,16 @@ inline Derived& DenseBase<Derived>::setRandom()
   */
 template<typename Derived>
 EIGEN_STRONG_INLINE Derived&
-DenseStorageBase<Derived>::setRandom(Index size)
+PlainObjectBase<Derived>::setRandom(Index newSize)
 {
-  resize(size);
+  resize(newSize);
   return setRandom();
 }
 
 /** Resizes to the given size, and sets all coefficients in this expression to random values.
   *
-  * \param rows the new number of rows
-  * \param cols the new number of columns
+  * \param nbRows the new number of rows
+  * \param nbCols the new number of columns
   *
   * Example: \include Matrix_setRandom_int_int.cpp
   * Output: \verbinclude Matrix_setRandom_int_int.out
@@ -149,10 +141,12 @@ DenseStorageBase<Derived>::setRandom(Index size)
   */
 template<typename Derived>
 EIGEN_STRONG_INLINE Derived&
-DenseStorageBase<Derived>::setRandom(Index rows, Index cols)
+PlainObjectBase<Derived>::setRandom(Index nbRows, Index nbCols)
 {
-  resize(rows, cols);
+  resize(nbRows, nbCols);
   return setRandom();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_RANDOM_H

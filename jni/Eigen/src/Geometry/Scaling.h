@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2008 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_SCALING_H
 #define EIGEN_SCALING_H
+
+namespace Eigen { 
 
 /** \geometry_module \ingroup Geometry_Module
   *
@@ -72,13 +59,18 @@ public:
   inline Transform<Scalar,Dim,Affine> operator* (const Translation<Scalar,Dim>& t) const;
 
   /** Concatenates a uniform scaling and an affine transformation */
-  template<int Dim, int Mode>
-  inline Transform<Scalar,Dim,Mode> operator* (const Transform<Scalar,Dim, Mode>& t) const;
+  template<int Dim, int Mode, int Options>
+  inline Transform<Scalar,Dim,(int(Mode)==int(Isometry)?Affine:Mode)> operator* (const Transform<Scalar,Dim, Mode, Options>& t) const
+  {
+   Transform<Scalar,Dim,(int(Mode)==int(Isometry)?Affine:Mode)> res = t;
+   res.prescale(factor());
+   return res;
+}
 
   /** Concatenates a uniform scaling and a linear transformation matrix */
   // TODO returns an expression
   template<typename Derived>
-  inline typename ei_plain_matrix_type<Derived>::type operator* (const MatrixBase<Derived>& other) const
+  inline typename internal::plain_matrix_type<Derived>::type operator* (const MatrixBase<Derived>& other) const
   { return other * m_factor; }
 
   template<typename Derived,int Dim>
@@ -107,8 +99,8 @@ public:
     * determined by \a prec.
     *
     * \sa MatrixBase::isApprox() */
-  bool isApprox(const UniformScaling& other, typename NumTraits<Scalar>::Real prec = NumTraits<Scalar>::dummy_precision()) const
-  { return ei_isApprox(m_factor, other.factor(), prec); }
+  bool isApprox(const UniformScaling& other, const typename NumTraits<Scalar>::Real& prec = NumTraits<Scalar>::dummy_precision()) const
+  { return internal::isApprox(m_factor, other.factor(), prec); }
 
 };
 
@@ -130,18 +122,18 @@ static inline UniformScaling<std::complex<RealScalar> > Scaling(const std::compl
 
 /** Constructs a 2D axis aligned scaling */
 template<typename Scalar>
-static inline DiagonalMatrix<Scalar,2> Scaling(Scalar sx, Scalar sy)
+static inline DiagonalMatrix<Scalar,2> Scaling(const Scalar& sx, const Scalar& sy)
 { return DiagonalMatrix<Scalar,2>(sx, sy); }
 /** Constructs a 3D axis aligned scaling */
 template<typename Scalar>
-static inline DiagonalMatrix<Scalar,3> Scaling(Scalar sx, Scalar sy, Scalar sz)
+static inline DiagonalMatrix<Scalar,3> Scaling(const Scalar& sx, const Scalar& sy, const Scalar& sz)
 { return DiagonalMatrix<Scalar,3>(sx, sy, sz); }
 
 /** Constructs an axis aligned scaling expression from vector expression \a coeffs
   * This is an alias for coeffs.asDiagonal()
   */
 template<typename Derived>
-static inline const DiagonalWrapper<Derived> Scaling(const MatrixBase<Derived>& coeffs)
+static inline const DiagonalWrapper<const Derived> Scaling(const MatrixBase<Derived>& coeffs)
 { return coeffs.asDiagonal(); }
 
 /** \addtogroup Geometry_Module */
@@ -169,14 +161,6 @@ UniformScaling<Scalar>::operator* (const Translation<Scalar,Dim>& t) const
   return res;
 }
 
-template<typename Scalar>
-template<int Dim,int Mode>
-inline Transform<Scalar,Dim,Mode>
-UniformScaling<Scalar>::operator* (const Transform<Scalar,Dim, Mode>& t) const
-{
-  Transform<Scalar,Dim,Mode> res = t;
-  res.prescale(factor());
-  return res;
-}
+} // end namespace Eigen
 
 #endif // EIGEN_SCALING_H

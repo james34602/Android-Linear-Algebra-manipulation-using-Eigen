@@ -3,27 +3,14 @@
 //
 // Copyright (C) 2009-2010 Gael Guennebaud <gael.guennebaud@inria.fr>
 //
-// Eigen is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 3 of the License, or (at your option) any later version.
-//
-// Alternatively, you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of
-// the License, or (at your option) any later version.
-//
-// Eigen is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License or the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License and a copy of the GNU General Public License along with
-// Eigen. If not, see <http://www.gnu.org/licenses/>.
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #ifndef EIGEN_SELFCWISEBINARYOP_H
 #define EIGEN_SELFCWISEBINARYOP_H
+
+namespace Eigen { 
 
 /** \class SelfCwiseBinaryOp
   * \ingroup Core_Module
@@ -39,28 +26,31 @@
   *
   * \sa class SwapWrapper for a similar trick.
   */
+
+namespace internal {
 template<typename BinaryOp, typename Lhs, typename Rhs>
-struct ei_traits<SelfCwiseBinaryOp<BinaryOp,Lhs,Rhs> >
-  : ei_traits<CwiseBinaryOp<BinaryOp,Lhs,Rhs> >
+struct traits<SelfCwiseBinaryOp<BinaryOp,Lhs,Rhs> >
+  : traits<CwiseBinaryOp<BinaryOp,Lhs,Rhs> >
 {
   enum {
     // Note that it is still a good idea to preserve the DirectAccessBit
     // so that assign can correctly align the data.
-    Flags = ei_traits<CwiseBinaryOp<BinaryOp,Lhs,Rhs> >::Flags | (Lhs::Flags&DirectAccessBit) | (Lhs::Flags&LvalueBit),
+    Flags = traits<CwiseBinaryOp<BinaryOp,Lhs,Rhs> >::Flags | (Lhs::Flags&DirectAccessBit) | (Lhs::Flags&LvalueBit),
     OuterStrideAtCompileTime = Lhs::OuterStrideAtCompileTime,
     InnerStrideAtCompileTime = Lhs::InnerStrideAtCompileTime
   };
 };
+}
 
 template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
-  : public ei_dense_xpr_base< SelfCwiseBinaryOp<BinaryOp, Lhs, Rhs> >::type
+  : public internal::dense_xpr_base< SelfCwiseBinaryOp<BinaryOp, Lhs, Rhs> >::type
 {
   public:
 
-    typedef typename ei_dense_xpr_base<SelfCwiseBinaryOp>::type Base;
+    typedef typename internal::dense_xpr_base<SelfCwiseBinaryOp>::type Base;
     EIGEN_DENSE_PUBLIC_INTERFACE(SelfCwiseBinaryOp)
 
-    typedef typename ei_packet_traits<Scalar>::type Packet;
+    typedef typename internal::packet_traits<Scalar>::type Packet;
 
     inline SelfCwiseBinaryOp(Lhs& xpr, const BinaryOp& func = BinaryOp()) : m_matrix(xpr), m_functor(func) {}
 
@@ -74,12 +64,22 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     // TODO make Assign use .data()
     inline Scalar& coeffRef(Index row, Index col)
     {
+      EIGEN_STATIC_ASSERT_LVALUE(Lhs)
       return m_matrix.const_cast_derived().coeffRef(row, col);
+    }
+    inline const Scalar& coeffRef(Index row, Index col) const
+    {
+      return m_matrix.coeffRef(row, col);
     }
 
     // note that this function is needed by assign to correctly align loads/stores
     // TODO make Assign use .data()
     inline Scalar& coeffRef(Index index)
+    {
+      EIGEN_STATIC_ASSERT_LVALUE(Lhs)
+      return m_matrix.const_cast_derived().coeffRef(index);
+    }
+    inline const Scalar& coeffRef(Index index) const
     {
       return m_matrix.const_cast_derived().coeffRef(index);
     }
@@ -88,7 +88,7 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     void copyCoeff(Index row, Index col, const DenseBase<OtherDerived>& other)
     {
       OtherDerived& _other = other.const_cast_derived();
-      ei_internal_assert(row >= 0 && row < rows()
+      eigen_internal_assert(row >= 0 && row < rows()
                          && col >= 0 && col < cols());
       Scalar& tmp = m_matrix.coeffRef(row,col);
       tmp = m_functor(tmp, _other.coeff(row,col));
@@ -98,7 +98,7 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     void copyCoeff(Index index, const DenseBase<OtherDerived>& other)
     {
       OtherDerived& _other = other.const_cast_derived();
-      ei_internal_assert(index >= 0 && index < m_matrix.size());
+      eigen_internal_assert(index >= 0 && index < m_matrix.size());
       Scalar& tmp = m_matrix.coeffRef(index);
       tmp = m_functor(tmp, _other.coeff(index));
     }
@@ -107,7 +107,7 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     void copyPacket(Index row, Index col, const DenseBase<OtherDerived>& other)
     {
       OtherDerived& _other = other.const_cast_derived();
-      ei_internal_assert(row >= 0 && row < rows()
+      eigen_internal_assert(row >= 0 && row < rows()
                         && col >= 0 && col < cols());
       m_matrix.template writePacket<StoreMode>(row, col,
         m_functor.packetOp(m_matrix.template packet<StoreMode>(row, col),_other.template packet<LoadMode>(row, col)) );
@@ -117,7 +117,7 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     void copyPacket(Index index, const DenseBase<OtherDerived>& other)
     {
       OtherDerived& _other = other.const_cast_derived();
-      ei_internal_assert(index >= 0 && index < m_matrix.size());
+      eigen_internal_assert(index >= 0 && index < m_matrix.size());
       m_matrix.template writePacket<StoreMode>(index,
         m_functor.packetOp(m_matrix.template packet<StoreMode>(index),_other.template packet<LoadMode>(index)) );
     }
@@ -131,10 +131,10 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
       EIGEN_CHECK_BINARY_COMPATIBILIY(BinaryOp,typename Lhs::Scalar,typename RhsDerived::Scalar);
       
     #ifdef EIGEN_DEBUG_ASSIGN
-      ei_assign_traits<SelfCwiseBinaryOp, RhsDerived>::debug();
+      internal::assign_traits<SelfCwiseBinaryOp, RhsDerived>::debug();
     #endif
-      ei_assert(rows() == rhs.rows() && cols() == rhs.cols());
-      ei_assign_impl<SelfCwiseBinaryOp, RhsDerived>::run(*this,rhs.derived());
+      eigen_assert(rows() == rhs.rows() && cols() == rhs.cols());
+      internal::assign_impl<SelfCwiseBinaryOp, RhsDerived>::run(*this,rhs.derived());
     #ifndef EIGEN_NO_DEBUG
       this->checkTransposeAliasing(rhs.derived());
     #endif
@@ -146,8 +146,18 @@ template<typename BinaryOp, typename Lhs, typename Rhs> class SelfCwiseBinaryOp
     // at first...
     SelfCwiseBinaryOp& operator=(const Rhs& _rhs)
     {
-      typename ei_nested<Rhs>::type rhs(_rhs);
+      typename internal::nested<Rhs>::type rhs(_rhs);
       return Base::operator=(rhs);
+    }
+
+    Lhs& expression() const 
+    { 
+      return m_matrix;
+    }
+
+    const BinaryOp& functor() const 
+    { 
+      return m_functor;
     }
 
   protected:
@@ -162,7 +172,7 @@ template<typename Derived>
 inline Derived& DenseBase<Derived>::operator*=(const Scalar& other)
 {
   typedef typename Derived::PlainObject PlainObject;
-  SelfCwiseBinaryOp<ei_scalar_product_op<Scalar>, Derived, typename PlainObject::ConstantReturnType> tmp(derived());
+  SelfCwiseBinaryOp<internal::scalar_product_op<Scalar>, Derived, typename PlainObject::ConstantReturnType> tmp(derived());
   tmp = PlainObject::Constant(rows(),cols(),other);
   return derived();
 }
@@ -170,13 +180,12 @@ inline Derived& DenseBase<Derived>::operator*=(const Scalar& other)
 template<typename Derived>
 inline Derived& DenseBase<Derived>::operator/=(const Scalar& other)
 {
-  typedef typename ei_meta_if<NumTraits<Scalar>::IsInteger,
-                                        ei_scalar_quotient_op<Scalar>,
-                                        ei_scalar_product_op<Scalar> >::ret BinOp;
   typedef typename Derived::PlainObject PlainObject;
-  SelfCwiseBinaryOp<BinOp, Derived, typename PlainObject::ConstantReturnType> tmp(derived());
-  tmp = PlainObject::Constant(rows(),cols(), NumTraits<Scalar>::IsInteger ? other : Scalar(1)/other);
+  SelfCwiseBinaryOp<internal::scalar_quotient_op<Scalar>, Derived, typename PlainObject::ConstantReturnType> tmp(derived());
+  tmp = PlainObject::Constant(rows(),cols(), other);
   return derived();
 }
+
+} // end namespace Eigen
 
 #endif // EIGEN_SELFCWISEBINARYOP_H

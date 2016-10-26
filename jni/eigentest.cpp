@@ -2,9 +2,6 @@
 #include <math.h>
 #include <jni.h>
 
-//#include <EigenUtil.h>
-
-#include <exception>
 #include <Eigen/Dense>
 
 using namespace Eigen;
